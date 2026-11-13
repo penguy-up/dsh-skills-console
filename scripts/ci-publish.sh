@@ -16,7 +16,7 @@ PKG_VERSION="${TAG#v}"   # v1.2.3 -> 1.2.3
 # 仓根 = 包根：没有子包目录，package.json 就在脚本的上一级。
 cd "$(dirname "$0")/.."
 
-name="@morehao/dsh-skills-console"
+name="$(node -p "require('./package.json').name")"
 PKG_JSON_VERSION="$(node -p "require('./package.json').version")"
 
 echo "Publish check: ${name}@${PKG_JSON_VERSION} (tag=${TAG})"

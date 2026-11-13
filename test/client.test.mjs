@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT = path.join(here, '..', 'client.js');
+const pkg = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8'));
 
 /**
  * 极简 React 存根：够跑通"渲染一次 → 跑 effect → 状态更新 → 再渲染一次"。
@@ -153,7 +154,7 @@ function loadModule(payload, options = {}) {
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(CLIENT, 'utf8'), sandbox);
   assert.ok(definition, 'client.js 必须向 __ModuleLoader__ 注册');
-  assert.equal(definition.id, '@morehao/dsh-skills-console');
+  assert.equal(definition.id, pkg.name);
 
   const stub = createReactStub({ refNodes: options.refNodes });
   const registrations = [];
