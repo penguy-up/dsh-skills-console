@@ -8,11 +8,76 @@ import { h } from '../host.js';
 import { short, githubRepoUrl, githubCommitUrl } from '../api.js';
 import type { AgentTipState, SkillRow, SkillsState } from '../api.js';
 import type { Translate } from '../copy.js';
-import { EyeIcon, InfoIcon, RefreshIcon, TrashIcon, DownloadIcon, ShareIcon } from '../icons.js';
+import { EyeIcon, InfoIcon, RefreshIcon, TrashIcon, DownloadIcon, ShareIcon, ChevronDownIcon } from '../icons.js';
 import { IntroModal } from './intro-modal.js';
 import { Overlay } from './overlay.js';
 import { PolicyModal } from './policy-modal.js';
 import { IntroBatchModal, useIntroJob, startIntroJob, cancelIntroJob, resumeIntroJob } from '../intro-batch.js';
+
+const STORAGE_KEY_COLLAPSED_SOURCES = 'dsh-skills-console:collapsed-sources';
+
+function readCollapsedSources(): Record<string, boolean> {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return {};
+    const raw = window.localStorage.getItem(STORAGE_KEY_COLLAPSED_SOURCES);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCollapsedSources(val: Record<string, boolean>): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_KEY_COLLAPSED_SOURCES, JSON.stringify(val));
+    }
+  } catch {
+    // 忽略配额错误或隐私受限模式
+  }
+}
+
+export interface SourceGroup {
+  key: string;
+  source: string | null;
+  title: string;
+  repoUrl: string | null;
+  isLocal: boolean;
+  rows: SkillRow[];
+}
+
+export function groupSkillsBySource(visibleRows: SkillRow[], t?: (key: string) => string): SourceGroup[] {
+  const map = new Map<string, SkillRow[]>();
+  for (const row of visibleRows) {
+    const raw = typeof row.source === 'string' ? row.source.trim() : '';
+    const key = raw || 'local';
+    const list = map.get(key);
+    if (list) {
+      list.push(row);
+    } else {
+      map.set(key, [row]);
+    }
+  }
+
+  const nonLocalKeys = Array.from(map.keys()).filter((k) => k !== 'local').sort((a, b) => a.localeCompare(b));
+  const sortedKeys = map.has('local') ? [...nonLocalKeys, 'local'] : nonLocalKeys;
+
+  return sortedKeys
+    .map((key) => {
+      const rows = map.get(key) || [];
+      const isLocal = key === 'local';
+      return {
+        key,
+        source: isLocal ? null : key,
+        title: isLocal ? (t ? t('group.local') : '本地 / 未归源') : key,
+        repoUrl: isLocal ? null : githubRepoUrl(key),
+        isLocal,
+        rows,
+      };
+    })
+    .filter((g) => g.rows.length > 0);
+}
 
 const UPDATABLE = new Set(['update-available', 'locally-modified', 'conflict']);
 
@@ -21,6 +86,9 @@ interface InstalledActions {
   onAdopt: (row: SkillRow) => void;
   onToggleMode: (row: SkillRow) => void;
   onSetInvocation: (row: SkillRow, mode: string) => void;
+  onBatchInvocation: (rows: SkillRow[], mode: string, sourceTitle?: string) => void;
+  onSetProjectInvocation: (cwd: string, row: SkillRow, mode: string) => void;
+  onBatchSetProjectInvocation: (cwd: string, rows: SkillRow[], mode: string) => void;
   onRequestUnpark: (row: SkillRow) => void;
   onUpdate: (row: SkillRow) => void;
   onDelete: (row: SkillRow) => void;
@@ -53,15 +121,18 @@ export interface InstalledTabProps {
   writable: boolean;
   agentTip: AgentTipState | null;
   builtinOpen: boolean;
+  selectedCwd?: string | null;
   actions: InstalledActions;
 }
 
 export function InstalledTab({
   t, data, rows, visibleRows, counts, bulkCount,
   filter, query, view, busy, writable, agentTip, builtinOpen,
+  selectedCwd,
   actions,
 }: InstalledTabProps) {
   const updatable = (row: SkillRow) => UPDATABLE.has(row.status);
+  const [collapsedSources, setCollapsedSources] = React.useState<Record<string, boolean>>(() => readCollapsedSources());
   const [policy, setPolicy] = React.useState<{ row: SkillRow } | null>(null);
   const [intro, setIntro] = React.useState<{ row: SkillRow } | null>(null);
   // 批量生成简介：确认弹窗 + 轮询任务进度
@@ -119,6 +190,41 @@ export function InstalledTab({
     }
     if (row.kind === 'file') {
       return h('span', { className: 'dshsc-chip muted', title: t('policy.flat') }, t('policy.flat'));
+    }
+    if (selectedCwd && row.projectOverride) {
+      const overrideMode = typeof row.projectOverride === 'string'
+        ? row.projectOverride
+        : row.projectOverride.mode;
+      const chipClass = overrideMode === 'hidden'
+        ? 'hidden'
+        : overrideMode === 'manual'
+          ? 'manual'
+          : 'auto';
+      const label = overrideMode === 'hidden'
+        ? t('scope.overriddenHidden')
+        : t('scope.overridden').replace('{mode}', t(`policy.${overrideMode}`) || overrideMode);
+
+      return h('span', { className: `dshsc-chip dshsc-project-override project-override ${chipClass}` },
+        h('button', {
+          type: 'button',
+          className: 'dshsc-chip-btn',
+          disabled: busy !== null,
+          title: t('policy.open'),
+          'aria-haspopup': 'dialog',
+          onClick: () => openPolicy(row),
+        }, label),
+        h('button', {
+          type: 'button',
+          className: 'dshsc-btn-reset-override dshsc-scope-reset dshsc-reset-override',
+          disabled: busy !== null,
+          title: t('scope.resetHint'),
+          'aria-label': `${t('scope.reset')} ${row.name}`,
+          onClick: (e: any) => {
+            e?.stopPropagation?.();
+            actions.onSetProjectInvocation(selectedCwd, row, 'default');
+          },
+        }, '↺'),
+      );
     }
     const mode = row.mode || 'auto';
     if (mode === 'hidden') {
@@ -293,8 +399,15 @@ export function InstalledTab({
   }
 
   function rowView(row: SkillRow) {
-    const parked = row.mode === 'hidden';
-    const off = parked || row.enabled === false;
+    const projectOverrideMode = selectedCwd && row.projectOverride
+      ? (typeof row.projectOverride === 'string' ? row.projectOverride : row.projectOverride.mode)
+      : null;
+    const parked = projectOverrideMode
+      ? projectOverrideMode === 'hidden'
+      : row.mode === 'hidden';
+    const off = projectOverrideMode
+      ? projectOverrideMode === 'hidden'
+      : (parked || row.enabled === false);
     const canUpdate = writable && updatable(row);
     // 启用却看不见：要么真身不在扫描根里，要么项目副本盖过了停用标记
     const hidden = !off && !row.visible;
@@ -459,6 +572,18 @@ export function InstalledTab({
     return groups.filter((group) => group.rows.length > 0);
   }
 
+  function toggleSourceCollapse(groupKey: string) {
+    setCollapsedSources((prev) => {
+      const next = { ...prev, [groupKey]: !prev[groupKey] };
+      writeCollapsedSources(next);
+      return next;
+    });
+  }
+
+  function groupedBySourceRows(): SourceGroup[] {
+    return groupSkillsBySource(visibleRows, t);
+  }
+
   function filterChip(id: string, label: string, dot: React.ReactNode = null) {
     return h('button', {
       key: id,
@@ -547,6 +672,134 @@ export function InstalledTab({
       : null;
   }
 
+  function renderSourceGroupHead(group: SourceGroup) {
+    const isCollapsed = Boolean(collapsedSources[group.key]);
+    const modeCounts = { auto: 0, manual: 0, hidden: 0 };
+    for (const row of group.rows) {
+      const override = selectedCwd && row.projectOverride
+        ? (typeof row.projectOverride === 'string' ? row.projectOverride : row.projectOverride.mode)
+        : null;
+      const mode = override === 'manual' || override === 'hidden' ? override : (override === 'auto' ? 'auto' : (row.mode || 'auto'));
+      if (mode === 'manual') modeCounts.manual += 1;
+      else if (mode === 'hidden') modeCounts.hidden += 1;
+      else modeCounts.auto += 1;
+    }
+    const policyKinds = (['auto', 'manual', 'hidden'] as const).filter((mode) => modeCounts[mode] > 0);
+    const policySummary = h('div', { className: `dshsc-source-policy${policyKinds.length > 1 ? ' mixed' : ''}`, 'aria-label': t('group.policyAria') },
+      h('span', { className: 'dshsc-source-policy-kind' }, policyKinds.length > 1 ? t('group.policyMixed') : t('group.policyAll')),
+      ...policyKinds.map((mode) => h('span', { key: mode, className: `dshsc-source-policy-count ${mode}` },
+        t('group.policyCount').replace('{mode}', t(`policy.${mode}`)).replace('{n}', String(modeCounts[mode])).replace('{total}', String(group.rows.length)))),
+    );
+    const repoUrl = group.repoUrl;
+    const titleNode = repoUrl
+      ? h('a', {
+          className: 'dshsc-repolink',
+          href: repoUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: t('link.openRepo'),
+          onClick: (e: any) => e?.stopPropagation?.(),
+        }, group.title)
+      : h('span', { className: 'dshsc-source-name' }, group.title);
+
+    const batchControl = h('div', {
+      className: 'dshsc-source-batch',
+      role: 'group',
+      'aria-label': t('batch.actions'),
+      title: t('batch.actions'),
+      onClick: (e: any) => e?.stopPropagation?.(),
+      onKeyDown: (e: any) => {
+        if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+      },
+    },
+      h('button', {
+        type: 'button',
+        className: 'dshsc-btn xs dshsc-source-batch-btn',
+        disabled: !writable || busy !== null,
+        title: t('batch.autoHint'),
+        'aria-label': t('batch.autoHint'),
+        onClick: (e: any) => {
+          e?.stopPropagation?.();
+          if (selectedCwd) {
+            actions.onBatchSetProjectInvocation(selectedCwd, group.rows, 'auto');
+          } else {
+            actions.onBatchInvocation(group.rows, 'auto', group.title);
+          }
+        },
+      }, t('batch.auto')),
+      h('button', {
+        type: 'button',
+        className: 'dshsc-btn xs dshsc-source-batch-btn',
+        disabled: !writable || busy !== null,
+        title: t('batch.manualHint'),
+        'aria-label': t('batch.manualHint'),
+        onClick: (e: any) => {
+          e?.stopPropagation?.();
+          if (selectedCwd) {
+            actions.onBatchSetProjectInvocation(selectedCwd, group.rows, 'manual');
+          } else {
+            actions.onBatchInvocation(group.rows, 'manual', group.title);
+          }
+        },
+      }, t('batch.manual')),
+      h('button', {
+        type: 'button',
+        className: 'dshsc-btn xs dshsc-source-batch-btn',
+        disabled: !writable || busy !== null,
+        title: t('batch.hiddenHint'),
+        'aria-label': t('batch.hiddenHint'),
+        onClick: (e: any) => {
+          e?.stopPropagation?.();
+          if (selectedCwd) {
+            actions.onBatchSetProjectInvocation(selectedCwd, group.rows, 'hidden');
+          } else {
+            actions.onBatchInvocation(group.rows, 'hidden', group.title);
+          }
+        },
+      }, t('batch.hidden')),
+    );
+
+    return h('div', {
+      className: `dshsc-group-head dshsc-source-head${isCollapsed ? ' closed' : ''}`,
+      role: 'button',
+      tabIndex: 0,
+      'aria-expanded': String(!isCollapsed),
+      'aria-label': `${group.title} ${isCollapsed ? t('group.expand') : t('group.collapse')}`,
+      title: isCollapsed ? t('group.expand') : t('group.collapse'),
+      onClick: () => toggleSourceCollapse(group.key),
+      onKeyDown: (e: any) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleSourceCollapse(group.key);
+        }
+      },
+    },
+      h('button', {
+        type: 'button',
+        className: 'dshsc-group-toggle',
+        'aria-expanded': String(!isCollapsed),
+        'aria-label': isCollapsed ? t('group.expand') : t('group.collapse'),
+        title: isCollapsed ? t('group.expand') : t('group.collapse'),
+        onClick: (e: any) => {
+          e?.stopPropagation?.();
+          toggleSourceCollapse(group.key);
+        },
+      }, h(ChevronDownIcon, { size: 12 })),
+      h('div', { className: 'dshsc-source-summary' }, titleNode, policySummary),
+      batchControl,
+      h('span', { className: 'n' }, group.rows.length),
+    );
+  }
+
+  function scopeBanner() {
+    if (!selectedCwd) return null;
+    const projectName = data?.projectConfig?.projectName
+      || selectedCwd.split(/[/\\]/).filter(Boolean).pop()
+      || selectedCwd;
+    return h('div', { className: 'dshsc-banner info dshsc-scope-banner' },
+      t('scope.banner').replace('{name}', projectName));
+  }
+
   function content() {
     // 列表区是唯一的滚动容器：顶部的提示 / 筛选条固定，只有行区域跟着页面剩余高度滚。
     if (!data) {
@@ -574,10 +827,19 @@ export function InstalledTab({
               h('span', null, group.title),
               h('span', { className: 'n' }, group.rows.length)),
             listView(group.rows.map(rowView)))))
+      : view === 'source'
+      ? h('div', { className: 'dshsc-groupstack' }, groupedBySourceRows().map((group) => {
+          const isCollapsed = Boolean(collapsedSources[group.key]);
+          return h('div', { key: group.key },
+            renderSourceGroupHead(group),
+            isCollapsed ? null : listView(group.rows.map(rowView)),
+          );
+        }))
       : listView(visibleRows.map(rowView));
     return h(
       'div',
       { className: 'dshsc-tabpane' },
+      scopeBanner(),
       visibleOnlyBanners(),
       builtinNotice(),
       listBar(),
@@ -612,7 +874,11 @@ export function InstalledTab({
         onSave: (mode) => {
           const target = policy.row;
           setPolicy(null);
-          void actions.onSetInvocation(target, mode);
+          if (selectedCwd) {
+            void actions.onSetProjectInvocation(selectedCwd, target, mode);
+          } else {
+            void actions.onSetInvocation(target, mode);
+          }
         },
         onUnpark: () => {
           const target = policy.row;
@@ -695,3 +961,5 @@ export function InstalledTab({
 
   return h(React.Fragment, null, content(), policyModal, introModal, batchModal, resumeModal);
 }
+
+export { groupSkillsBySource as groupedBySourceRows };

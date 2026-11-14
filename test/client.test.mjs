@@ -2590,3 +2590,354 @@ test('布局卫生：上次选中的主面板能选中 → 保持用户选择，
   const after = JSON.parse(ls.getItem('dsh-skills-console:layout-selected'));
   assert.equal(after.key, 'dsh-skills-console', '可选中时不清记号');
 });
+
+test('按来源视图：切换按钮、按仓库字母序分组、本地排末尾、技能计数与过滤', async () => {
+  const installs = [
+    ROW({ name: 'zeta-skill', source: 'zeta/tools' }),
+    ROW({ name: 'alpha-skill-2', source: 'alpha/kit' }),
+    ROW({ name: 'alpha-skill-1', source: 'alpha/kit' }),
+    ROW({ name: 'local-null', source: null }),
+    ROW({ name: 'local-blank', source: '   ' }),
+  ];
+  const { Component, stub } = loadModule({ ...STATE, installs });
+  const first = stub.render(Component, {});
+  first.effects.forEach((fn) => fn());
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  let tree = stub.render(Component, {}, first.hooks).tree;
+
+  // 默认平铺视图无来源分组头
+  assert.equal(collectByClass(tree, 'dshsc-source-head').length, 0);
+
+  // 工具栏有「按来源」按钮
+  const sourceBtn = collectButtons(tree).find((b) => textOf(b).trim() === '按来源');
+  assert.ok(sourceBtn, '工具栏应有「按来源」分段按钮');
+  assert.equal(sourceBtn.props['aria-pressed'], 'false');
+
+  // 点击切换到按来源视图
+  sourceBtn.props.onClick();
+  tree = stub.render(Component, {}, first.hooks).tree;
+
+  // 按钮高亮为 pressed
+  const activeSourceBtn = collectButtons(tree).find((b) => textOf(b).trim() === '按来源');
+  assert.equal(activeSourceBtn.props['aria-pressed'], 'true');
+
+  // 3 个分组：alpha/kit, zeta/tools, 本地 / 未归源
+  const groupHeads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(groupHeads.length, 3, '应按来源聚类为 3 组');
+
+  // 第 1 组：alpha/kit（字母序排前），2 个技能，带 GitHub 外链
+  const head0 = groupHeads[0];
+  const link0 = collectByClass(head0, 'dshsc-repolink')[0];
+  assert.ok(link0, 'GitHub 来源应显示仓库外链');
+  assert.equal(textOf(link0).trim(), 'alpha/kit');
+  assert.equal(link0.props.href, 'https://github.com/alpha/kit');
+  assert.equal(link0.props.target, '_blank');
+  const count0 = collectByClass(head0, 'n')[0];
+  assert.equal(textOf(count0).trim(), '2');
+
+  // 第 2 组：zeta/tools，1 个技能
+  const head1 = groupHeads[1];
+  const link1 = collectByClass(head1, 'dshsc-repolink')[0];
+  assert.equal(textOf(link1).trim(), 'zeta/tools');
+  assert.equal(link1.props.href, 'https://github.com/zeta/tools');
+  const count1 = collectByClass(head1, 'n')[0];
+  assert.equal(textOf(count1).trim(), '1');
+
+  // 第 3 组：本地未归源（null 与空白合并），2 个技能，排在末尾，无外链
+  const head2 = groupHeads[2];
+  assert.equal(collectByClass(head2, 'dshsc-repolink').length, 0, '本地未归源组无外链');
+  const localTitle = collectByClass(head2, 'dshsc-source-name')[0];
+  assert.equal(textOf(localTitle).trim(), '本地 / 未归源');
+  const count2 = collectByClass(head2, 'n')[0];
+  assert.equal(textOf(count2).trim(), '2');
+
+  // 搜索过滤：输入 'zeta'，仅命中 zeta-skill，其余空组不渲染
+  const searchInput = collectByType(tree, 'input').find((node) => node.props.type === 'search');
+  searchInput.props.onChange({ target: { value: 'zeta' } });
+  tree = stub.render(Component, {}, first.hooks).tree;
+  const filteredHeads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(filteredHeads.length, 1, '无匹配的分组应被跳过');
+  assert.equal(textOf(collectByClass(filteredHeads[0], 'dshsc-repolink')[0]).trim(), 'zeta/tools');
+  assert.ok(textOf(tree).includes('zeta-skill'));
+  assert.ok(!textOf(tree).includes('alpha-skill-1'));
+  assert.ok(!textOf(tree).includes('local-null'));
+});
+
+test('按来源视图：折叠/展开、键盘无障碍、外链阻断冒泡、持久化到 localStorage', async () => {
+  const installs = [
+    ROW({ name: 'skill-alpha', source: 'org/alpha' }),
+    ROW({ name: 'skill-beta', source: 'org/beta' }),
+  ];
+  const ls = fakeLocalStorage();
+  const { Component, stub } = loadModule({ ...STATE, installs }, { localStorage: ls });
+  const first = stub.render(Component, {});
+  first.effects.forEach((fn) => fn());
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  let tree = stub.render(Component, {}, first.hooks).tree;
+  const sourceBtn = collectButtons(tree).find((b) => textOf(b).trim() === '按来源');
+  sourceBtn.props.onClick();
+  tree = stub.render(Component, {}, first.hooks).tree;
+
+  // 初始：全部展开
+  let heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'true');
+  assert.ok(!heads[0].props.className.includes('closed'));
+  assert.ok(heads[0].props.title.includes('折叠'));
+  assert.ok(textOf(tree).includes('skill-alpha'));
+  assert.ok(textOf(tree).includes('skill-beta'));
+
+  // 点击外链：必须 stopPropagation，不触发展开/折叠
+  let linkStopCalled = false;
+  const linkAlpha = collectByClass(heads[0], 'dshsc-repolink')[0];
+  linkAlpha.props.onClick({ stopPropagation: () => { linkStopCalled = true; } });
+  assert.ok(linkStopCalled, '点击 repo link 必须 stopPropagation');
+  tree = stub.render(Component, {}, first.hooks).tree;
+  heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'true', '外链点击不折叠分组');
+
+  // 点击头部整行：折叠 org/alpha
+  heads[0].props.onClick();
+  tree = stub.render(Component, {}, first.hooks).tree;
+  heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'false');
+  assert.ok(heads[0].props.className.includes('closed'));
+  assert.ok(heads[0].props.title.includes('展开'));
+  assert.ok(!textOf(tree).includes('skill-alpha'), '折叠后技能列表不渲染');
+  assert.ok(textOf(tree).includes('skill-beta'), '另一分组不受影响');
+
+  // 验证写回 localStorage
+  const stored1 = JSON.parse(ls.getItem('dsh-skills-console:collapsed-sources'));
+  assert.equal(stored1['org/alpha'], true);
+
+  // 点击 toggle 图标按钮：恢复展开，且 toggle 按钮自身 stopPropagation
+  const toggleBtn = collectByClass(heads[0], 'dshsc-group-toggle')[0];
+  let toggleStopCalled = false;
+  toggleBtn.props.onClick({ stopPropagation: () => { toggleStopCalled = true; } });
+  assert.ok(toggleStopCalled, 'toggle 按钮点击应 stopPropagation');
+  tree = stub.render(Component, {}, first.hooks).tree;
+  heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'true');
+  assert.ok(!heads[0].props.className.includes('closed'));
+  assert.ok(textOf(tree).includes('skill-alpha'), '展开后重新渲染技能列表');
+  const stored2 = JSON.parse(ls.getItem('dsh-skills-console:collapsed-sources'));
+  assert.equal(stored2['org/alpha'], false);
+
+  // 键盘操作：Enter 键折叠、空格键展开
+  let enterPrevented = false;
+  heads[0].props.onKeyDown({ key: 'Enter', preventDefault: () => { enterPrevented = true; } });
+  assert.ok(enterPrevented, 'Enter 键触发 preventDefault');
+  tree = stub.render(Component, {}, first.hooks).tree;
+  heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'false', 'Enter 键成功折叠');
+
+  let spacePrevented = false;
+  heads[0].props.onKeyDown({ key: ' ', preventDefault: () => { spacePrevented = true; } });
+  assert.ok(spacePrevented, '空格键触发 preventDefault');
+  tree = stub.render(Component, {}, first.hooks).tree;
+  heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'true', '空格键成功展开');
+});
+
+test('按来源视图：英文模式（By source、Local / Unlinked）与初始折叠状态回显', async () => {
+  const installs = [
+    ROW({ name: 'remote-skill', source: 'org/remote' }),
+    ROW({ name: 'local-skill', source: null }),
+  ];
+  const ls = fakeLocalStorage({
+    'dsh-skills-console:collapsed-sources': JSON.stringify({ local: true }),
+  });
+  const { Component, stub } = loadModule({ ...STATE, installs }, { locale: 'en', localStorage: ls });
+  const first = stub.render(Component, {});
+  first.effects.forEach((fn) => fn());
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  let tree = stub.render(Component, {}, first.hooks).tree;
+  const sourceBtn = collectButtons(tree).find((b) => textOf(b).trim() === 'By source');
+  assert.ok(sourceBtn, '英文模式下按钮文案为 By source');
+  sourceBtn.props.onClick();
+  tree = stub.render(Component, {}, first.hooks).tree;
+
+  const heads = collectByClass(tree, 'dshsc-source-head');
+  assert.equal(heads.length, 2);
+
+  // 第 1 组 org/remote：未折叠，文案为 Collapse
+  assert.equal(heads[0].props['aria-expanded'], 'true');
+  assert.ok(heads[0].props.title.includes('Collapse'));
+  assert.ok(textOf(tree).includes('remote-skill'));
+
+  // 第 2 组 local：读到 localStorage 初始折叠为 true，文案为 Local / Unlinked 与 Expand
+  assert.equal(heads[1].props['aria-expanded'], 'false');
+  assert.ok(heads[1].props.className.includes('closed'));
+  assert.ok(heads[1].props.title.includes('Expand'));
+  const localTitle = collectByClass(heads[1], 'dshsc-source-name')[0];
+  assert.equal(textOf(localTitle).trim(), 'Local / Unlinked');
+  assert.ok(!textOf(tree).includes('local-skill'), '初始折叠项不渲染技能');
+});
+
+test('按来源视图：批量操作栏（自动/仅手动/完全停用）、阻断折叠冒泡、批量请求与 Toast 状态反馈', async () => {
+  const installs = [
+    ROW({ name: 'skill-1', source: 'org/repo' }),
+    ROW({ name: 'skill-2', source: 'org/repo' }),
+    ROW({ name: 'skill-local', source: null }),
+  ];
+  const calls = [];
+  let batchResponse = {
+    ok: true,
+    mode: 'manual',
+    succeeded: ['skill-1', 'skill-2'],
+    skipped: [],
+    failed: [],
+  };
+
+  const fetchStub = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: init.body });
+    if (String(url).split('?')[0].endsWith('/state')) {
+      return { ok: true, status: 200, json: async () => ({ ...STATE, installs }) };
+    }
+    if (String(url).endsWith('/skills/batch-invocation')) {
+      return { ok: true, status: 200, json: async () => batchResponse };
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+
+  const { Component, stub } = loadModule({ ...STATE, installs }, { fetch: fetchStub });
+  let out = await settle(stub, Component);
+
+  // 1. 切换到「按来源」视图
+  const sourceBtn = collectButtons(out.tree).find((b) => textOf(b).trim() === '按来源');
+  assert.ok(sourceBtn, '应有按来源按钮');
+  sourceBtn.props.onClick();
+  out = await settle(stub, Component, out.hooks);
+
+  // 找到 org/repo 组头部
+  let heads = collectByClass(out.tree, 'dshsc-source-head');
+  assert.equal(heads.length, 2);
+  const repoHead = heads[0];
+
+  // 验证批量操作区域 .dshsc-source-batch
+  const batchContainer = collectByClass(repoHead, 'dshsc-source-batch')[0];
+  assert.ok(batchContainer, '来源分组头应包含批量操作区域');
+  assert.equal(batchContainer.props.role, 'group');
+  assert.equal(batchContainer.props['aria-label'], '批量操作');
+
+  const batchBtns = collectButtons(batchContainer);
+  assert.equal(batchBtns.length, 3, '应包含自动、仅手动、完全停用 3 个按钮');
+  const [autoBtn, manualBtn, hiddenBtn] = batchBtns;
+  assert.equal(textOf(autoBtn).trim(), '自动');
+  assert.equal(textOf(manualBtn).trim(), '仅手动');
+  assert.equal(textOf(hiddenBtn).trim(), '完全停用');
+
+  // 2. 点击「全部设为仅手动」：
+  // 验证 stopPropagation 被调用，且分组保持展开（未折叠）
+  let stopped = false;
+  manualBtn.props.onClick({ stopPropagation: () => { stopped = true; } });
+  assert.ok(stopped, '点击批量按钮必须阻断冒泡');
+  out = await settle(stub, Component, out.hooks);
+
+  heads = collectByClass(out.tree, 'dshsc-source-head');
+  assert.equal(heads[0].props['aria-expanded'], 'true', '点击批量按钮不应折叠分组');
+
+  // 验证发出的 API 请求
+  const call1 = calls.find((c) => c.url.endsWith('/skills/batch-invocation') && c.method === 'POST');
+  assert.ok(call1, '应调用 POST /skills/batch-invocation');
+  assert.deepEqual(JSON.parse(call1.body), {
+    names: ['skill-1', 'skill-2'],
+    mode: 'manual',
+  });
+
+  // 验证 Toast 反馈（成功）
+  let toastBars = collectByClass(out.tree, 'dshsc-toastbar');
+  assert.ok(toastBars.length > 0, '操作完成后应弹出 Toast');
+  assert.ok(toastBars[0].props.className.includes('ok'), '成功 Toast 应带 ok 类');
+  assert.ok(textOf(toastBars[0]).includes('已将 2 个技能设为仅手动'));
+
+  // 3. 点击「全部完全停用」
+  batchResponse = {
+    ok: true,
+    mode: 'hidden',
+    succeeded: ['skill-1', 'skill-2'],
+    skipped: [],
+    failed: [],
+  };
+  hiddenBtn.props.onClick({ stopPropagation: () => {} });
+  out = await settle(stub, Component, out.hooks);
+
+  const call2 = calls.filter((c) => c.url.endsWith('/skills/batch-invocation') && c.method === 'POST')[1];
+  assert.ok(call2);
+  assert.deepEqual(JSON.parse(call2.body), {
+    names: ['skill-1', 'skill-2'],
+    mode: 'hidden',
+  });
+  toastBars = collectByClass(out.tree, 'dshsc-toastbar');
+  const latestToast2 = toastBars[toastBars.length - 1];
+  assert.ok(textOf(latestToast2).includes('已将 2 个技能设为完全停用'));
+
+  // 4. 点击「全部设为自动」，模拟存在作者声明跳过与失败项
+  batchResponse = {
+    ok: true,
+    mode: 'auto',
+    succeeded: ['skill-1'],
+    skipped: [{ name: 'skill-2', reason: 'author-declared' }],
+    failed: [{ name: 'skill-3', message: 'failed', code: 'err' }],
+  };
+  autoBtn.props.onClick({ stopPropagation: () => {} });
+  out = await settle(stub, Component, out.hooks);
+
+  const call3 = calls.filter((c) => c.url.endsWith('/skills/batch-invocation') && c.method === 'POST')[2];
+  assert.ok(call3);
+  assert.deepEqual(JSON.parse(call3.body), {
+    names: ['skill-1', 'skill-2'],
+    mode: 'auto',
+  });
+  toastBars = collectByClass(out.tree, 'dshsc-toastbar');
+  const latestToast3 = toastBars[toastBars.length - 1];
+  const toastText = textOf(latestToast3);
+  assert.ok(latestToast3.props.className.includes('err'), '有失败时 Toast 为 err');
+  assert.ok(toastText.includes('已将 1 个技能设为自动'));
+  assert.ok(toastText.includes('（1 个技能保留作者原声明）'));
+  assert.ok(toastText.includes('（1 个技能设置失败）'));
+
+  // 5. 键盘事件阻断：Enter / Space 冒泡被阻断
+  let enterStopped = false;
+  batchContainer.props.onKeyDown({ key: 'Enter', stopPropagation: () => { enterStopped = true; } });
+  assert.ok(enterStopped, '批量控件上按 Enter 应阻断冒泡');
+
+  let spaceStopped = false;
+  batchContainer.props.onKeyDown({ key: ' ', stopPropagation: () => { spaceStopped = true; } });
+  assert.ok(spaceStopped, '批量控件上按 Space 应阻断冒泡');
+});
+
+test('按来源视图：不可写或忙碌时批量操作按钮禁用', async () => {
+  const installs = [ROW({ name: 'skill-1', source: 'org/repo' })];
+  // 1. readOnly 为 true 时，writable 计算为 false
+  const { Component, stub } = loadModule({ ...STATE, readOnly: true, installs });
+  let out = await settle(stub, Component);
+
+  const sourceBtn = collectButtons(out.tree).find((b) => textOf(b).trim() === '按来源');
+  sourceBtn.props.onClick();
+  out = await settle(stub, Component, out.hooks);
+
+  const batchContainer = collectByClass(out.tree, 'dshsc-source-batch')[0];
+  const buttons = collectButtons(batchContainer);
+  assert.equal(buttons.length, 3);
+  for (const btn of buttons) {
+    assert.equal(btn.props.disabled, true, 'readOnly: true 时批量按钮应处于禁用状态');
+  }
+
+  // 2. cli.usable 为 false 时，批量按钮同样处于禁用状态
+  const { Component: CompUnusable, stub: stubUnusable } = loadModule({
+    ...STATE,
+    cli: { ...STATE.cli, usable: false },
+    installs,
+  });
+  let outUnusable = await settle(stubUnusable, CompUnusable);
+  const srcBtn2 = collectButtons(outUnusable.tree).find((b) => textOf(b).trim() === '按来源');
+  srcBtn2.props.onClick();
+  outUnusable = await settle(stubUnusable, CompUnusable, outUnusable.hooks);
+  const btnsUnusable = collectButtons(collectByClass(outUnusable.tree, 'dshsc-source-batch')[0]);
+  for (const btn of btnsUnusable) {
+    assert.equal(btn.props.disabled, true, 'cli.usable: false 时批量按钮应处于禁用状态');
+  }
+});

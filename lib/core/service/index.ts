@@ -13,7 +13,8 @@ import {
   reloadState,
 } from './state-view.js';
 import { adopt, rebaselineHashes } from './tracking.js';
-import { reconcileInvocations, setInvocation, unpark } from './invocation.js';
+import { batchSetInvocation, reconcileInvocations, setInvocation, unpark } from './invocation.js';
+import { batchSetProjectInvocation, setProjectInvocation } from './project-invocation.js';
 import { setMode } from './mode.js';
 import { setExports, setLinks, setSettings } from './settings.js';
 import { install, remove } from './install.js';
@@ -164,6 +165,12 @@ export function createService({
     adopt: (args) => adopt(ctx, args),
 
     setInvocation: (args) => setInvocation(ctx, args),
+
+    batchSetInvocation: (args) => batchSetInvocation(ctx, args),
+
+    setProjectInvocation: (args) => setProjectInvocation(ctx, args),
+
+    batchSetProjectInvocation: (args) => batchSetProjectInvocation(ctx, args),
 
     unpark: (args) => unpark(ctx, args),
 

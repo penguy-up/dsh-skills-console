@@ -259,6 +259,98 @@ test('/skills/:name/invocation：三档 mode 透传给 service，409 原样返�
   assert.equal(JSON.parse(conflict.out.body).code, 'error.skills.parked');
 });
 
+test('/skills/batch-invocation：批量启停透传 body 给 service.batchSetInvocation', async () => {
+  const calls = [];
+  const service = {
+    reloadState() {},
+    getState: async () => ({ ok: true }),
+    batchSetInvocation: async (payload) => {
+      calls.push(payload);
+      return { ok: true, mode: payload.mode, succeeded: payload.names, skipped: [], failed: [] };
+    },
+  };
+  const handler = createRoutes({ service, logger: () => {} });
+  const res = fakeRes();
+  await handler(
+    {
+      url: `${ROUTE_PREFIX}/skills/batch-invocation`,
+      method: 'POST',
+      headers: { 'x-dsh-skills-console': '1' },
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(JSON.stringify({ names: ['alpha', 'beta'], mode: 'manual' }));
+      },
+    },
+    res,
+  );
+  assert.equal(res.out.status, 200);
+  assert.deepEqual(calls, [{ names: ['alpha', 'beta'], mode: 'manual' }]);
+  const body = JSON.parse(res.out.body);
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.succeeded, ['alpha', 'beta']);
+});
+
+test('/project/invocation：透传 cwd, name, mode 给 service.setProjectInvocation', async () => {
+  const calls = [];
+  const service = {
+    reloadState() {},
+    getState: async () => ({ ok: true }),
+    setProjectInvocation: async (payload) => {
+      calls.push(payload);
+      return { ok: true, projectRoot: '/fake/root', name: payload.name, mode: payload.mode };
+    },
+  };
+  const handler = createRoutes({ service, logger: () => {} });
+  const res = fakeRes();
+  await handler(
+    {
+      url: `${ROUTE_PREFIX}/project/invocation`,
+      method: 'POST',
+      headers: { 'x-dsh-skills-console': '1' },
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(JSON.stringify({ cwd: '/fake/root', name: 'alpha', mode: 'hidden' }));
+      },
+    },
+    res,
+  );
+  assert.equal(res.out.status, 200);
+  assert.deepEqual(calls, [{ cwd: '/fake/root', name: 'alpha', mode: 'hidden' }]);
+  const body = JSON.parse(res.out.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.name, 'alpha');
+  assert.equal(body.mode, 'hidden');
+});
+
+test('/project/batch-invocation：透传 cwd, names, mode 给 service.batchSetProjectInvocation', async () => {
+  const calls = [];
+  const service = {
+    reloadState() {},
+    getState: async () => ({ ok: true }),
+    batchSetProjectInvocation: async (payload) => {
+      calls.push(payload);
+      return { ok: true, projectRoot: '/fake/root', names: payload.names, mode: payload.mode };
+    },
+  };
+  const handler = createRoutes({ service, logger: () => {} });
+  const res = fakeRes();
+  await handler(
+    {
+      url: `${ROUTE_PREFIX}/project/batch-invocation`,
+      method: 'POST',
+      headers: { 'x-dsh-skills-console': '1' },
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(JSON.stringify({ cwd: '/fake/root', names: ['alpha', 'beta'], mode: 'auto' }));
+      },
+    },
+    res,
+  );
+  assert.equal(res.out.status, 200);
+  assert.deepEqual(calls, [{ cwd: '/fake/root', names: ['alpha', 'beta'], mode: 'auto' }]);
+  const body = JSON.parse(res.out.body);
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.names, ['alpha', 'beta']);
+  assert.equal(body.mode, 'auto');
+});
+
 test('/skills/:name/unpark：默认 keep=null，显式 keep 透传', async () => {
   const calls = [];
   const service = {

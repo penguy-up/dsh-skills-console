@@ -127,6 +127,26 @@ export interface ParkInfo {
   [extra: string]: unknown;
 }
 
+export interface ProjectOverride {
+  mode: 'auto' | 'manual' | 'hidden';
+  updatedAt?: string;
+  [extra: string]: unknown;
+}
+
+export interface ProjectConfigInfo {
+  projectRoot: string;
+  projectName: string;
+  overrides?: Record<string, ProjectOverride>;
+  [extra: string]: unknown;
+}
+
+export interface WorkspaceItem {
+  id: string;
+  title: string;
+  path: string;
+  [extra: string]: unknown;
+}
+
 /**
  * 账本行（已安装技能）：`LedgerRow` 的可读字段 + 视图实际读取的按扫描结果拼出来的字段。
  * 不直接 `extends LedgerRow`：契约里的 `install/locked/parked/invocation` 是跨模块占位字段，
@@ -160,6 +180,7 @@ export interface SkillRow {
   exports: ExportRow[];
   visibility?: VisibilityInfo | null;
   park?: ParkInfo | null;
+  projectOverride?: ProjectOverride | null;
   [extra: string]: unknown;
 }
 
@@ -271,6 +292,8 @@ export interface SkillsState {
   /** 运行中 / 最近中断的批量简介任务摘要（用于挂载后恢复轮询 / 提示「继续」）。 */
   activeIntroJob?: any;
   visibleOnly?: VisibleOnlyItem[];
+  workspaces?: WorkspaceItem[];
+  projectConfig?: ProjectConfigInfo | null;
   [extra: string]: unknown;
 }
 
