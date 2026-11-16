@@ -293,6 +293,36 @@ export const CSS = `
     background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent); color: var(--dsw-alias-label-secondary);
     font-size: 10px; line-height: 15px; text-align: center; font-weight: 500; font-variant-numeric: tabular-nums; }
   .dshsc-gdot { width: 5px; height: 5px; border-radius: 50%; background: var(--dsw-alias-brand-primary); opacity: .8; flex: none; }
+  /* 按来源分组表头 */
+  .dshsc-group-head.dshsc-source-head { cursor: pointer; user-select: none;
+    transition: background .12s ease, border-color .12s ease; flex-wrap: wrap; }
+  .dshsc-group-head.dshsc-source-head:hover { background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 75%, transparent); }
+  .dshsc-group-head.dshsc-source-head.closed { border-bottom: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; }
+  .dshsc-group-head.dshsc-source-head .dshsc-group-toggle { display: inline-flex; align-items: center; justify-content: center;
+    padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; flex: none; }
+  .dshsc-group-head.dshsc-source-head .dshsc-chevron { color: var(--dsw-alias-label-tertiary);
+    transition: transform .15s ease, color .12s ease; flex: none; }
+  .dshsc-group-head.dshsc-source-head:hover .dshsc-chevron { color: var(--dsw-alias-label-primary); }
+  .dshsc-group-head.dshsc-source-head.closed .dshsc-chevron { transform: rotate(-90deg); }
+  .dshsc-group-head.dshsc-source-head .dshsc-repolink { color: var(--dsw-alias-label-primary); font-size: 11px; font-weight: 600; }
+  .dshsc-group-head.dshsc-source-head .dshsc-repolink:hover { color: var(--dsw-alias-brand-primary); }
+  .dshsc-group-head.dshsc-source-head .dshsc-source-name { color: var(--dsw-alias-label-primary); font-size: 11px; font-weight: 600; }
+  .dshsc-source-summary { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .dshsc-source-policy { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; color: var(--dsw-alias-label-tertiary); font-size: 10px; line-height: 1.2; }
+  .dshsc-source-policy-kind { font-weight: 600; color: var(--dsw-alias-label-secondary); }
+  .dshsc-source-policy-count { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .dshsc-source-policy-count.auto { color: var(--dsw-alias-state-success-primary); }
+  .dshsc-source-policy-count.manual { color: var(--dsw-alias-brand-primary); }
+  .dshsc-source-policy-count.hidden { color: var(--dsw-alias-label-secondary); }
+  .dshsc-group-head.dshsc-source-head .dshsc-source-batch { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .dshsc-group-head.dshsc-source-head .dshsc-source-batch-btn { box-sizing: border-box; height: 20px; font-size: 10.5px; line-height: 18px; padding: 0 6px;
+    border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1);
+    color: var(--dsw-alias-label-secondary); white-space: nowrap; cursor: pointer;
+    transition: background .12s ease, color .12s ease, border-color .12s ease; }
+  .dshsc-group-head.dshsc-source-head .dshsc-source-batch-btn:hover:not(:disabled) {
+    background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
+  .dshsc-group-head.dshsc-source-head .dshsc-source-batch-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .dshsc-group-head.dshsc-source-head .n { flex: none; align-self: center; }
 
   /* 说明会是一整句，窄面板必然折行：图标单独成列并贴住首行，正文列负责换行，避免图标被挤成孤行 */
   .dshsc-notice { display: flex; flex-direction: column; font-size: 11.5px;

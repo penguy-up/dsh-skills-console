@@ -4,9 +4,11 @@
 
 **简体中文** · [English](README.en.md)
 
-[![npm version](https://img.shields.io/npm/v/@morehao/dsh-skills-console.svg)](https://www.npmjs.com/package/@morehao/dsh-skills-console) [![check](https://github.com/morehao/dsh-skills-console/actions/workflows/check.yml/badge.svg)](https://github.com/morehao/dsh-skills-console/actions/workflows/check.yml) [![license](https://img.shields.io/npm/l/@morehao/dsh-skills-console.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/@penguy-up/dsh-skills-console.svg)](https://www.npmjs.com/package/@penguy-up/dsh-skills-console) [![check](https://github.com/penguy-up/dsh-skills-console/actions/workflows/check.yml/badge.svg)](https://github.com/penguy-up/dsh-skills-console/actions/workflows/check.yml) [![license](https://img.shields.io/npm/l/@penguy-up/dsh-skills-console.svg)](LICENSE)
 
 DSH（DeepSeek Harness）的技能控制台：**安装、更新、删除、启停、共享至其他 Agent，外加一份订阅清单**。
+
+本项目是 [`@morehao/dsh-skills-console`](https://github.com/morehao/dsh-skills-console) 的增强 fork；安装与运行时包身份为 `@penguy-up/dsh-skills-console`。
 
 它把本机技能收进一张清单：有哪些、从哪来、谁能用、是不是最新。要用的打开，不用的关掉；别的 Agent 需要，一键建链过去——技能本体始终只有一份。
 
@@ -31,31 +33,31 @@ DSH（DeepSeek Harness）的技能控制台：**安装、更新、删除、启�
 | 查看 | 只读打开技能正文与文件：渲染 / 原文切换、目录树、单文件预览，外加来源、哈希与共享信息 |
 | 技能简介 | 列表每行一个 ✨，点开就能看到模型写的「这个技能能做什么、什么时候用」；只发 `SKILL.md` 与文件名清单，结果缓存在本地，内容没变不重复调用 |
 | 订阅 | 关注 `owner/repo` 的上游变化，只记快照、不下载技能；展开条目能看到作者原描述，也可以让模型写一段 AI 简介再决定装不装；ref / 子目录可选，不填 ref 时跟随默认分支 |
-| 作用范围 | 管 user 级共享技能；暂不支持按项目启停。项目或用户目录里有同名副本时，副本仍优先可见 |
+| 作用范围 | 同时管理全局共享技能与当前项目技能；项目级策略只写项目覆盖，不修改全局技能 |
 
 ## 截图
 
-截图取自 v0.5.2 的 DSH Web 实机（深色主题）。素材都放在 [`assets/`](https://github.com/morehao/dsh-skills-console/tree/main/assets)（位图图标与界面截图），不随 npm 包发布，所以这里用绝对地址引用，GitHub 与 npm 页面都能看到。
+截图取自 v0.5.2 的 DSH Web 实机（深色主题）。素材都放在 [`assets/`](https://github.com/penguy-up/dsh-skills-console/tree/main/assets)（位图图标与界面截图），不随 npm 包发布，所以这里用绝对地址引用，GitHub 与 npm 页面都能看到。
 
 **已安装清单**：来源、调用策略、共享的 Agent、更新状态一屏看全；顶部切「已安装 / 订阅」。
 
-![已安装清单：来源、调用策略、共享的 Agent 与更新状态一屏看全](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-1-installed.png)
+![已安装清单：来源、调用策略、共享的 Agent 与更新状态一屏看全](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-1-installed.png)
 
 **只读查看器**：列表不动，右侧抽屉渲染 `SKILL.md`；可切原文、看文件树与信息，也能进整页阅读。
 
-![只读查看器：右侧抽屉渲染 SKILL.md，可切原文与文件树](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-2-viewer.png)
+![只读查看器：右侧抽屉渲染 SKILL.md，可切原文与文件树](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-2-viewer.png)
 
 **AI 简介**：点行内 ✨，看模型概括的「能做什么、什么时候用」；和调用策略等弹窗一样居中打开，生成过就直接读本地缓存。
 
-![AI 简介：居中弹窗展示模型生成的能力简介](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-3-intro.png)
+![AI 简介：居中弹窗展示模型生成的能力简介](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-3-intro.png)
 
 **订阅清单**：只记 `owner/repo` 的上游快照；展开看仓库里有几个技能、哪些已装、各自状态。
 
-![订阅清单：展开仓库查看技能与安装状态](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-4-subscriptions.png)
+![订阅清单：展开仓库查看技能与安装状态](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-4-subscriptions.png)
 
 **添加订阅**：填 `owner/repo` 或 GitHub URL，ref 与子目录可空；只关注，不下载技能。
 
-![添加订阅：填写来源、ref 与子目录](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-5-subscribe-dialog.png)
+![添加订阅：填写来源、ref 与子目录](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-5-subscribe-dialog.png)
 
 ## 界面
 
@@ -64,7 +66,7 @@ DSH（DeepSeek Harness）的技能控制台：**安装、更新、删除、启�
 - **每行五个动作**：开关（启停）、查看、更新、共享设置、删除；技能名旁的 ✨ 打开 AI 简介；窄面板下隐藏「查看」，技能名本身仍是入口。状态标签覆盖最新 / 可更新 / 安装后有改动 / 上游已移除 / 软链断裂等。
 - **窄面板不跳版**：动作组按面板宽度自然换行，插件名始终完整；列表按宽度切两列；滚动只发生在列表区，切 tab、调整窗口都不会让整页翻面。
 - **Agent 多了不挤**：每行最多展示 3 个，其余折成 `+n`，悬浮或聚焦即可看全。
-- **找得到**：支持按名称 / 来源 / Agent 搜索，按「可更新 / 待检查 / 已停用」筛选，平铺或按 Agent 分组。
+- **找得到**：支持按名称 / 来源 / Agent 搜索，按「可更新 / 待检查 / 已停用」筛选，平铺、按来源或按 Agent 分组。
 - **上游即来源**：插件的安装都来自 GitHub 仓库，来源（`owner/repo`）就是上游。只要装进来就能检查更新，不存在「无上游」这种状态；「待检查」只表示这次没拿到上游结论（限流、网络、仓库 404 等），下次检查会重试。订阅只是批量 / 定时探测的调度载体，不是「能否检测更新」的前提。
 
 ## 查看技能内容
@@ -130,7 +132,7 @@ plugin_manager install_bundle(target = <本仓库绝对路径>)
 ```yaml
 - insert:
     - id: dsh-skills-console
-      name: '@morehao/dsh-skills-console'
+      name: '@penguy-up/dsh-skills-console'
 ```
 
 面板出现在 DSH Web 的设置页 / 侧栏。
@@ -184,7 +186,7 @@ plugin_manager install_bundle(target = <本仓库绝对路径>)
 **不要求启用「技能控制台」插件**，也不走 HTTP：
 
 ```js
-import { createSkillsConsole } from '@morehao/dsh-skills-console/api';
+import { createSkillsConsole } from '@penguy-up/dsh-skills-console/api';
 
 const api = createSkillsConsole(); // 插件启用时复用插件实例；未启用时 headless 单写
 const installed = await api.list({ names: ['git-kit', 'handoff', 'disk-cleanup'] });
@@ -207,7 +209,6 @@ registry 机制、cordis 服务 `skillsConsole`、版本兼容边界见 [docs/ap
 - 不做图片 / 二进制预览。
 - 不做跨机器同步，不落盘任何 token。
 - 不做进程级隐身：「自动」的启停只对 DSH 生效；「完全停用」会改名 `SKILL.md`，读该目录的其他 Agent 也看不到，但不会阻止外部重新写回文件。
-- 不支持项目级启停：项目里的同名技能仍按 DSH 的优先级可见。
 - 不接管宿主 preset 层与其他插件自带的技能源；诊断里会把它们标成盲区，而不是假装支持。
 
 ## 许可

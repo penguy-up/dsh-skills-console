@@ -134,10 +134,10 @@ Level 2: 结构匹配（name 一致 且 存在于订阅快照路径中）
 ## 六、接口契约与数据模型变更
 
 ### 6.1 Host 路由变更 (`lib/routes.ts`)
-- `POST /api/morehao/skills-console/skills/match-sources`：批量识别来源
-- `POST /api/morehao/skills-console/skills/batch-invocation`：按来源批量调整策略
-- `GET /api/morehao/skills-console/project/state?cwd=<path>`：获取项目级覆盖状态
-- `POST /api/morehao/skills-console/project/invocation`：更新项目级启停覆盖
+- `POST /api/penguy-up/skills-console/skills/match-sources`：批量识别来源
+- `POST /api/penguy-up/skills-console/skills/batch-invocation`：按来源批量调整策略
+- `GET /api/penguy-up/skills-console/project/state?cwd=<path>`：获取项目级覆盖状态
+- `POST /api/penguy-up/skills-console/project/invocation`：更新项目级启停覆盖
 
 ### 6.2 状态契约扩充 (`lib/contract/state.d.ts`)
 - 全局 `InstallRecord` 增加 `inferredSource` 元数据字段；

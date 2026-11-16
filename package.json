@@ -48,7 +48,8 @@
       "immediately": true,
       "inject": [
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "dsh-better-sidebar"
       ]
     }
   },
@@ -91,6 +92,7 @@
     "@deepseek-ai/dsh-skill": ">=0.2.0-rc.1 <0.3.0-0",
     "@deepseek-ai/dsh-skill-filesystem": ">=0.2.0-rc.1 <0.3.0-0",
     "@deepseek-ai/schemastery": "~3.18.5 || ~3.19.0",
+    "dsh-better-sidebar": ">=0.32.1 <0.33.0",
     "yaml": "^2.4.2"
   },
   "peerDependenciesMeta": {
@@ -101,6 +103,9 @@
       "optional": true
     },
     "@deepseek-ai/dsh-skill-filesystem": {
+      "optional": true
+    },
+    "dsh-better-sidebar": {
       "optional": true
     }
   },

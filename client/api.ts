@@ -1,5 +1,5 @@
 /** Host API：统一前缀、鉴权头、JSON 错误码。 */
-export const API = '/api/morehao/skills-console';
+export const API = '/api/penguy-up/skills-console';
 
 /** 成功响应的通用形态：`ok: true` + 各路由自己的字段。 */
 export type ApiResult = Record<string, any>;
@@ -65,7 +65,7 @@ export async function apiCall<T extends ApiResult = ApiResult>(
   return json as T;
 }
 
-export const GITHUB_URL = 'https://github.com/morehao/dsh-skills-console';
+export const GITHUB_URL = 'https://github.com/penguy-up/dsh-skills-console';
 
 /** 插件自身版本检查（GET）。`fresh` 跳过 Host 端 5 分钟缓存。 */
 export function checkPluginUpdate({ fresh = false }: { fresh?: boolean } = {}): Promise<ApiResult> {
@@ -127,6 +127,26 @@ export interface ParkInfo {
   [extra: string]: unknown;
 }
 
+export interface ProjectOverride {
+  mode: 'auto' | 'manual' | 'hidden';
+  updatedAt?: string;
+  [extra: string]: unknown;
+}
+
+export interface ProjectConfigInfo {
+  projectRoot: string;
+  projectName: string;
+  overrides?: Record<string, ProjectOverride>;
+  [extra: string]: unknown;
+}
+
+export interface WorkspaceItem {
+  id: string;
+  title: string;
+  path: string;
+  [extra: string]: unknown;
+}
+
 /**
  * 账本行（已安装技能）：`LedgerRow` 的可读字段 + 视图实际读取的按扫描结果拼出来的字段。
  * 不直接 `extends LedgerRow`：契约里的 `install/locked/parked/invocation` 是跨模块占位字段，
@@ -160,6 +180,7 @@ export interface SkillRow {
   exports: ExportRow[];
   visibility?: VisibilityInfo | null;
   park?: ParkInfo | null;
+  projectOverride?: ProjectOverride | null;
   [extra: string]: unknown;
 }
 
@@ -271,6 +292,8 @@ export interface SkillsState {
   /** 运行中 / 最近中断的批量简介任务摘要（用于挂载后恢复轮询 / 提示「继续」）。 */
   activeIntroJob?: any;
   visibleOnly?: VisibleOnlyItem[];
+  workspaces?: WorkspaceItem[];
+  projectConfig?: ProjectConfigInfo | null;
   [extra: string]: unknown;
 }
 

@@ -151,7 +151,7 @@ export function apply(ctx: any, config: any = {}) {
 
   /**
    * 跨插件公共 API（设计 §2 / §5.1）：消费方（dsh-commands）只 import
-   * `@morehao/dsh-skills-console/api`。插件启用时把同一套 PublicApi 登记进进程级
+   * `@penguy-up/dsh-skills-console/api`。插件启用时把同一套 PublicApi 登记进进程级
    * runtime registry，并作为可选 cordis 服务提供，使 `createSkillsConsole()` 命中这里、
    * 不创建第二个 StateStore（单写者）。服务名冲突时保留已有服务、只记日志。
    */

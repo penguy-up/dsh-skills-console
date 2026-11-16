@@ -5,7 +5,7 @@ import { HttpError, createRouteHandler } from '@morehao/dsh-plugin-kit/http';
 import { ServiceError } from './core/service.js';
 import { StateReadOnlyError } from './core/state.js';
 
-export const ROUTE_PREFIX = '/api/morehao/skills-console';
+export const ROUTE_PREFIX = '/api/penguy-up/skills-console';
 const MAX_BODY = 256 * 1024;
 
 /**
@@ -67,6 +67,15 @@ function matchRoute(method, pathname) {
   }
   if (segments[0] === 'skills' && segments.length === 3 && segments[2] === 'invocation' && method === 'POST') {
     return { name: 'skill.invocation', params: { name: decodeURIComponent(segments[1]) } };
+  }
+  if (segments[0] === 'skills' && segments.length === 2 && segments[1] === 'batch-invocation' && method === 'POST') {
+    return { name: 'skills.batch-invocation' };
+  }
+  if (segments[0] === 'project' && segments.length === 2 && segments[1] === 'invocation' && method === 'POST') {
+    return { name: 'project.invocation' };
+  }
+  if (segments[0] === 'project' && segments.length === 2 && segments[1] === 'batch-invocation' && method === 'POST') {
+    return { name: 'project.batch-invocation' };
   }
   if (segments[0] === 'skills' && segments.length === 3 && segments[2] === 'unpark' && method === 'POST') {
     return { name: 'skill.unpark', params: { name: decodeURIComponent(segments[1]) } };
@@ -280,6 +289,20 @@ async function dispatch(route: any, { body, query, service, pluginUpdate = null,
       });
     case 'skill.invocation':
       return service.setInvocation({ name: route.params.name, mode: body.mode });
+    case 'skills.batch-invocation':
+      return service.batchSetInvocation(body);
+    case 'project.invocation':
+      return service.setProjectInvocation({
+        cwd: body?.cwd ?? query.cwd,
+        name: body?.name,
+        mode: body?.mode,
+      });
+    case 'project.batch-invocation':
+      return service.batchSetProjectInvocation({
+        cwd: body?.cwd ?? query.cwd,
+        names: body?.names,
+        mode: body?.mode,
+      });
     case 'skill.unpark':
       return service.unpark({ name: route.params.name, keep: body.keep || null });
     case 'skill.remove':

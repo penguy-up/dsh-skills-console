@@ -551,3 +551,326 @@ export async function unpark(ctx: ServiceCtx, { name, keep = null }) {
     };
   });
 }
+
+/**
+ * 批量调用策略控制：按来源/名称批量设置为 auto / manual / hidden。
+ * - 串行执行各技能写操作（通过 ctx.runtime.enqueue），捕获单技能错误不中断整批；
+ * - target 'auto'：若当前为 hidden 则先 unpark；若为作者声明 manual 则跳过并记入 skipped；否则恢复 frontmatter 并改回 auto；
+ * - target 'manual'：若当前为 hidden 则先 unpark，再写入 manual frontmatter 与备份；若已是 manual 记入 succeeded；
+ * - target 'hidden'：若已是 hidden 记入 succeeded；否则执行 A′ park（重命名 SKILL.md -> SKILL.md.disabled 并写 marker）；
+ * - 批处理完成后统一触发一次 ctx.invalidatePolicies()。
+ */
+export async function batchSetInvocation(
+  ctx: ServiceCtx,
+  payload: { names: string[]; mode: string } = {} as any,
+) {
+  const { names, mode } = payload || {};
+  assertWritable(ctx);
+  if (!['auto', 'manual', 'hidden'].includes(mode)) {
+    throw new ServiceError('error.skills.bad-mode', 'mode 只能是 auto / manual / hidden');
+  }
+  if (!Array.isArray(names)) {
+    throw new ServiceError('error.skills.bad-request', 'names 必须是数组');
+  }
+
+  const { store, paths, logger } = ctx;
+  const enqueue = ctx.runtime.enqueue;
+
+  const succeeded: string[] = [];
+  const skipped: { name: string; reason: string }[] = [];
+  const failed: { name: string; message: string; code: string }[] = [];
+
+  for (const name of names) {
+    try {
+      await enqueue(`mode:${name}`, async () => {
+        assertSafeSkillName(name);
+        const initial = store.findInstall(name);
+        if (!initial) {
+          throw new ServiceError('error.skills.not-managed', `${name} 没有安装记录`);
+        }
+        const install = store.findInstall(name) || initial;
+        const dir = canonicalDir(ctx, name);
+        const kind = skillKindOf(dir);
+        if (kind === 'file') {
+          throw new ServiceError('error.skills.unsupported', `${name} 是平铺 .md 技能，不支持调用策略`, { name, kind }, 400);
+        }
+        if (kind !== 'dir') {
+          throw new ServiceError('error.skills.not-installed', `${name} 不在 canonical 里`, { name, kind }, 400);
+        }
+        if (fs.lstatSync(dir).isSymbolicLink()) {
+          throw new ServiceError('error.skills.not-writable', `${name} 的 canonical 是符号链接，拒绝编辑`, { name }, 409);
+        }
+
+        const park = inspectPark(dir);
+        const currentMode = park.parked || install.mode === 'hidden' ? 'hidden' : (install.mode || 'auto');
+
+        if (mode === 'hidden') {
+          if (currentMode === 'hidden') {
+            succeeded.push(name);
+            return;
+          }
+          const previousMode = currentMode === 'manual' ? 'manual' : 'auto';
+          if (park.marker && park.hasSkill && !park.hasDisabled) {
+            try {
+              fs.rmSync(path.join(dir, '.dsh-skills-console.park.json'), { force: true });
+            } catch {
+              /* parkSkill 会再报 */
+            }
+          }
+          let parked;
+          try {
+            parked = parkSkill({ dir, name, previousMode });
+          } catch (error) {
+            throw invocationFailure(error);
+          }
+          const hidden = {
+            disabledFile: parked.marker?.disabledFile || 'SKILL.md.disabled',
+            marker: '.dsh-skills-console.park.json',
+            previousMode,
+            canonicalHash: parked.canonicalHash || parked.marker?.canonicalHash || null,
+            at: nowIso(),
+          };
+          try {
+            store.update((draft: any) => {
+              const row = draft.installs.find((item: any) => item.name === name);
+              if (!row) return;
+              row.mode = 'hidden';
+              row.enabled = true;
+              delete row.legacy;
+              row.hidden = hidden;
+            });
+          } catch (error) {
+            try {
+              unparkSkill({ dir, name, fallbackMode: previousMode });
+            } catch (rollbackError: any) {
+              logger('invocation.park.rollback.failed', { name, message: rollbackError.message });
+            }
+            throw error;
+          }
+          logger('invocation.hidden', { name, previousMode });
+          succeeded.push(name);
+          return;
+        }
+
+        // Target: manual
+        if (mode === 'manual') {
+          if (currentMode === 'hidden') {
+            if (!park.parked && install.mode === 'hidden') {
+              throw new ServiceError(
+                'error.skills.park-broken',
+                `${name} 记录为完全停用，但技能文件不在；请从回收站或备份找回`,
+                { name, reason: 'both-missing' },
+                409,
+              );
+            }
+            const fallbackMode = install.hidden?.previousMode || install.mode || 'auto';
+            let unparkResult;
+            try {
+              unparkResult = unparkSkill({ dir, name, fallbackMode: fallbackMode === 'manual' ? 'manual' : 'auto', keep: null });
+            } catch (error) {
+              throw invocationFailure(error);
+            }
+            store.update((draft: any) => {
+              const row = draft.installs.find((item: any) => item.name === name);
+              if (!row) return;
+              row.mode = unparkResult.mode === 'manual' ? 'manual' : 'auto';
+              row.enabled = true;
+              delete row.legacy;
+              row.hidden = null;
+              if (unparkResult.mode === 'manual' && row.manual && unparkResult.hashMismatch) {
+                row.manual = { ...row.manual, drift: true };
+              }
+            });
+            logger('invocation.unpark', { name, mode: unparkResult.mode, hashMismatch: unparkResult.hashMismatch });
+          } else if (install.mode === 'manual') {
+            succeeded.push(name);
+            return;
+          }
+
+          const currentInstall = store.findInstall(name) || install;
+          let text;
+          let plan;
+          try {
+            text = readSkillText(dir);
+            plan = planManualWrite(text);
+          } catch (error) {
+            throw invocationFailure(error);
+          }
+          if (plan.author) {
+            if (currentInstall.mode === 'manual' && currentInstall.manual?.origin === 'author') {
+              succeeded.push(name);
+              return;
+            }
+            commitAuthorManual(ctx, name);
+            logger('invocation.manual', { name, origin: 'author' });
+            succeeded.push(name);
+            return;
+          }
+          if (currentInstall.mode === 'manual' && currentInstall.manual?.origin === 'plugin' && !plan.changed) {
+            succeeded.push(name);
+            return;
+          }
+          try {
+            commitManual(ctx, { name, dir, plan, text });
+          } catch (error) {
+            throw invocationFailure(error);
+          }
+          logger('invocation.manual', { name, origin: 'plugin', original: plan.original });
+          succeeded.push(name);
+          return;
+        }
+
+        // Target: auto
+        if (currentMode === 'hidden') {
+          if (!park.parked && install.mode === 'hidden') {
+            throw new ServiceError(
+              'error.skills.park-broken',
+              `${name} 记录为完全停用，但技能文件不在；请从回收站或备份找回`,
+              { name, reason: 'both-missing' },
+              409,
+            );
+          }
+          const fallbackMode = install.hidden?.previousMode || install.mode || 'auto';
+          let unparkResult;
+          try {
+            unparkResult = unparkSkill({ dir, name, fallbackMode: fallbackMode === 'manual' ? 'manual' : 'auto', keep: null });
+          } catch (error) {
+            throw invocationFailure(error);
+          }
+          store.update((draft: any) => {
+            const row = draft.installs.find((item: any) => item.name === name);
+            if (!row) return;
+            row.mode = unparkResult.mode === 'manual' ? 'manual' : 'auto';
+            row.enabled = true;
+            delete row.legacy;
+            row.hidden = null;
+            if (unparkResult.mode === 'manual' && row.manual && unparkResult.hashMismatch) {
+              row.manual = { ...row.manual, drift: true };
+            }
+          });
+          logger('invocation.unpark', { name, mode: unparkResult.mode, hashMismatch: unparkResult.hashMismatch });
+        }
+
+        const currentInstall = store.findInstall(name) || install;
+        let isAuthor = currentInstall.manual?.origin === 'author' || currentInstall.manual?.original === 'true';
+        if (!isAuthor && currentInstall.manual?.origin !== 'plugin') {
+          try {
+            const text = readSkillText(dir);
+            const parsed = parseInvocation(text);
+            if (parsed.value === 'true') {
+              isAuthor = true;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (isAuthor) {
+          skipped.push({ name, reason: 'author-declared' });
+          return;
+        }
+
+        if (currentInstall.mode === 'manual' && currentInstall.manual) {
+          let text;
+          let plan;
+          try {
+            text = readSkillText(dir);
+            plan = planManualRestore(text, currentInstall.manual.original || 'absent');
+          } catch (error: any) {
+            if (error?.code === 'error.skills.author') {
+              skipped.push({ name, reason: 'author-declared' });
+              return;
+            }
+            if (error instanceof InvocationError && error.code === 'error.skills.drift') {
+              markDrift(ctx, name);
+            }
+            throw invocationFailure(error);
+          }
+          if (plan.changed) {
+            try {
+              try {
+                backupInvocation({ backupDir: paths.backupsDir, name, content: text });
+              } catch (error: any) {
+                throw new InvocationError(
+                  'error.skills.not-writable',
+                  `无法备份 ${name} 的 SKILL.md：${error.message}`,
+                  { name },
+                  409,
+                );
+              }
+              writeFileAtomic(path.join(dir, 'SKILL.md'), plan.nextText);
+            } catch (error) {
+              throw invocationFailure(error);
+            }
+            try {
+              store.update((draft: any) => {
+                const row = draft.installs.find((item: any) => item.name === name);
+                if (!row) return;
+                row.mode = 'auto';
+                row.enabled = true;
+                delete row.legacy;
+                row.manual = null;
+                row.hidden = null;
+              });
+            } catch (error) {
+              try {
+                writeFileAtomic(path.join(dir, 'SKILL.md'), text);
+              } catch (rollbackError: any) {
+                logger('invocation.rollback.failed', { name, message: rollbackError.message });
+              }
+              throw error;
+            }
+          } else {
+            store.update((draft: any) => {
+              const row = draft.installs.find((item: any) => item.name === name);
+              if (!row) return;
+              row.mode = 'auto';
+              row.enabled = true;
+              delete row.legacy;
+              row.manual = null;
+              row.hidden = null;
+            });
+          }
+          logger('invocation.auto', { name, changed: plan.changed });
+          succeeded.push(name);
+          return;
+        }
+
+        if (currentInstall.mode === 'auto' && !currentInstall.legacy && !currentInstall.hidden) {
+          succeeded.push(name);
+          return;
+        }
+
+        store.update((draft: any) => {
+          const row = draft.installs.find((item: any) => item.name === name);
+          if (!row) return;
+          row.mode = 'auto';
+          row.enabled = true;
+          delete row.legacy;
+          row.manual = null;
+          row.hidden = null;
+        });
+        logger('invocation.auto', { name, changed: false, legacy: Boolean(currentInstall.legacy) });
+        succeeded.push(name);
+      });
+    } catch (error: any) {
+      const code = error?.code || 'error.skills.internal';
+      const message = error?.message || String(error);
+      failed.push({ name, message, code });
+    }
+  }
+
+  try {
+    await ctx.invalidatePolicies();
+  } catch (error: any) {
+    logger('policy.invalidate.failed', { message: error?.message });
+  }
+
+  return {
+    ok: true,
+    mode,
+    succeeded,
+    skipped,
+    failed,
+  };
+}

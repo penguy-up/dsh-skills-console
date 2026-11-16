@@ -10,6 +10,11 @@ import {
   POLICY_PROVIDER,
   POLICY_RANK,
 } from '../dist/core/policy.js';
+import {
+  readProjectConfig,
+  writeProjectOverride,
+  batchWriteProjectOverrides,
+} from '../dist/core/project-policy.js';
 import { findProjectRoot } from '../dist/core/roots.js';
 
 function sandbox() {
@@ -215,4 +220,94 @@ test('registry：宿主没有 registerProvider → available=false；agent 注�
   const brokenPolicies = installPolicyProviders(broken.ctx, { provider });
   assert.equal(brokenPolicies.status().registered, 0);
   assert.deepEqual(brokenPolicies.status().errors.map((item) => item.code), ['no-register-provider']);
+});
+
+test('project-policy：readProjectConfig 与 writeProjectOverride 读写往返、default 删除覆写', () => {
+  const { root, project } = sandbox();
+
+  // 1. 缺失时返回 null
+  assert.equal(readProjectConfig(project), null);
+
+  // 2. 写入单个 override
+  const cfg1 = writeProjectOverride(project, 'demo', 'hidden');
+  assert.equal(cfg1.version, 1);
+  assert.equal(cfg1.overrides.demo.mode, 'hidden');
+  assert.ok(cfg1.overrides.demo.at);
+
+  // 3. 回读
+  const read1 = readProjectConfig(project);
+  assert.equal(read1.version, 1);
+  assert.equal(read1.overrides.demo.mode, 'hidden');
+
+  // 4. 批量写入
+  const cfg2 = batchWriteProjectOverrides(project, ['skill-a', 'skill-b'], 'auto');
+  assert.equal(cfg2.overrides['skill-a'].mode, 'auto');
+  assert.equal(cfg2.overrides['skill-b'].mode, 'auto');
+  assert.equal(cfg2.overrides.demo.mode, 'hidden', '保留既有覆写');
+
+  // 5. 'default' 删除覆写
+  const cfg3 = writeProjectOverride(project, 'demo', 'default');
+  assert.equal(cfg3.overrides.demo, undefined);
+  assert.equal(readProjectConfig(project).overrides.demo, undefined);
+
+  // 6. 损坏的 JSON 返回 null
+  fs.writeFileSync(path.join(project, '.dsh', 'skills-console.json'), 'not-json');
+  assert.equal(readProjectConfig(project), null);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('policyProvider：项目级覆写生效（hidden 强制隐藏，auto 项目级解禁全局停用）', async () => {
+  const { root, paths, project } = sandbox();
+  writeSkill(path.join(paths.canonical, 'alpha'), 'alpha', 'alpha desc');
+  writeSkill(path.join(paths.canonical, 'beta'), 'beta', 'beta desc');
+
+  // 全局状态：alpha 是 enabled=false (全局停用)，beta 是 enabled=true (全局启用)
+  const state = {
+    installs: [
+      { name: 'alpha', enabled: false },
+      { name: 'beta', enabled: true },
+    ],
+  };
+  const provider = providerFor(paths, state);
+
+  // 无项目覆写时：alpha 报告停用候选，beta 不报告
+  const initial = await provider.list({ cwd: project });
+  assert.equal(initial.length, 1);
+  assert.equal(initial[0].name, 'alpha');
+  assert.equal(initial[0].source, 'user-agents');
+  assert.deepEqual(initial[0].metadata, { dshSkillsConsole: { disabled: true } });
+
+  // 1. 项目级覆写：alpha 为 auto（项目内解禁），beta 为 hidden（项目内隐藏）
+  writeProjectOverride(project, 'alpha', 'auto');
+  writeProjectOverride(project, 'beta', 'hidden');
+
+  const listInProject = await provider.list({ cwd: project });
+  assert.equal(listInProject.length, 1);
+  assert.equal(listInProject[0].name, 'beta', 'beta 被项目级 hidden 报告为停用候选');
+  assert.equal(listInProject[0].source, 'project-override');
+  assert.deepEqual(listInProject[0].metadata, { dshSkillsConsole: { projectOverride: true } });
+
+  // 2. 在另一个项目或无 cwd 目录下：alpha 依然停用，beta 依然启用
+  const listOutside = await provider.list({});
+  assert.equal(listOutside.length, 1);
+  assert.equal(listOutside[0].name, 'alpha');
+
+  // 3. get: 校验正文回读
+  const betaCandidate = listInProject[0];
+  const betaDoc = await provider.get(betaCandidate, { cwd: project });
+  assert.equal(betaDoc.name, 'beta');
+  assert.equal(betaDoc.source, 'project-override');
+  assert.equal(betaDoc.invocation.modelInvocable, false);
+
+  // 4. get: 对被项目级 unmask 的 alpha，在项目内返回 undefined
+  const alphaCandidate = initial[0];
+  const alphaInProjectDoc = await provider.get(alphaCandidate, { cwd: project });
+  assert.equal(alphaInProjectDoc, undefined, '项目内已解禁，policy get 返回 undefined');
+
+  // 但在项目外 alphaDoc 依然能拿到
+  const alphaOutsideDoc = await provider.get(alphaCandidate, {});
+  assert.equal(alphaOutsideDoc.name, 'alpha');
+
+  fs.rmSync(root, { recursive: true, force: true });
 });

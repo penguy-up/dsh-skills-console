@@ -1,15 +1,15 @@
 # 公共 API：给其他插件 / 脚本复用技能安装与更新
 
-`@morehao/dsh-skills-console` 暴露一个稳定的、可 `import` 的公共 API，让其他 dsh 插件（例如
+`@penguy-up/dsh-skills-console` 暴露一个稳定的、可 `import` 的公共 API，让其他 dsh 插件（例如
 `@morehao/dsh-commands`）或普通 Node 脚本复用「安装 / 更新 / 检查 / 列出」技能的能力，
 **不要求启用技能控制台插件**，也不走 HTTP。
 
-- 子路径：`@morehao/dsh-skills-console/api`（`package.json` 的 `exports["./api"]`）。
+- 子路径：`@penguy-up/dsh-skills-console/api`（`package.json` 的 `exports["./api"]`）。
 - 硬版本：`API_VERSION = 1`。
 - 深路径（`dist/core/*`、`dist/contract/*`）不是契约，随时可改。
 
 ```js
-import { API_VERSION, SkillsConsoleError, createSkillsConsole } from '@morehao/dsh-skills-console/api';
+import { API_VERSION, SkillsConsoleError, createSkillsConsole } from '@penguy-up/dsh-skills-console/api';
 
 const api = createSkillsConsole();          // 命中插件实例，或创建 headless 实例
 if (api.apiVersion !== 1) throw new Error('技能控制台版本不兼容');
@@ -25,7 +25,7 @@ if (missing.length > 0) {
 
 ## 单写者：runtime registry
 
-包内部维护一个进程级 runtime registry（`Symbol.for('@morehao/dsh-skills-console/runtime')`）。
+包内部维护一个进程级 runtime registry（`Symbol.for('@penguy-up/dsh-skills-console/runtime')`）。
 `createSkillsConsole()` 的解析顺序：
 
 1. 按当前 `env` 算出候选 `state.json`，registry 里**精确匹配**：`apiVersion` 兼容 → 复用插件
@@ -40,7 +40,7 @@ if (missing.length > 0) {
 commands 的 headless 实例是唯一写者，之后装上 console 会从同一份 state 接管。
 
 `createSkillsConsole()` **不负责登记**，只有插件 `apply()` 会登记；因此包在未被启用时是惰性的：
-`import '@morehao/dsh-skills-console/api'` 不创建 `StateStore`、不写 state、不读技能目录。
+`import '@penguy-up/dsh-skills-console/api'` 不创建 `StateStore`、不写 state、不读技能目录。
 
 ## 工厂
 

@@ -4,7 +4,7 @@
 
 ## 1. 项目速览
 
-- 包：`@morehao/dsh-skills-console`（显示名「技能控制台」），DeepSeek Harness（dsh）的**技能控制台插件**；**仓库根即包根**，无 workspace、无子包目录。
+- 包：`@penguy-up/dsh-skills-console`（显示名「技能控制台」），DeepSeek Harness（dsh）的**技能控制台插件**；**仓库根即包根**，无 workspace、无子包目录。
 - 两个 half：Host（源码 `lib/**` + `lib/contract/`，`tsc` 编译到 `dist/`）与 Web Client（源码 `client/**`，esbuild 打包到根 `client.js`，`window.__ModuleLoader__` bundle）；默认 `settings.section` 一页两 tab，可在页内切到 `sidebar.panellist` + `main` 独立面板。
 - 纯 ESM、**`dependencies` 只有 `tar@7.5.22`（精确锁版本，供 native installer 解压）与 `@morehao/dsh-plugin-kit`（`^0.3.1`，插件自更新引擎）**；DSH 宿主已自带的能力（`@deepseek-ai/dsh-home-paths` / `dsh-skill` / `dsh-skill-filesystem` / `schemastery`，以及 YAML 解析用的 `yaml`）一律走 **`peerDependencies`**（由宿主 runtime resolution 提供，不进 `dependencies`、不打包），`devDependencies` 锁版本仅供本仓测试；Host 由 `tsc` 编译、Web Client 由 esbuild 打包，**两个 half 的产物（`dist/`、`client.js`）都不入库**，由 `npm run build` 生成（`prepare` / `prepack` 自动触发）；构建期 devDependency：typescript + esbuild。Node ≥ 22.20（`engines` 另接受 ≥ 24）。
 - 技能真身的安装/更新/删除由 native installer 写入：下载/解压/canonical（`~/.agents/skills`）/v3 lock 均由 `lib/core/installer.ts` 负责。本插件其余部分做三件事：**本地策略 provider**（DSH 侧启停/可见性）、**导出链**（给别的 Agent）、**记账 + 事务编排**。
@@ -13,7 +13,7 @@
 | 路径 | 作用 |
 |---|---|
 | [lib/index.ts](lib/index.ts) | `export const name = "dsh-skills-console"`、`inject`、`apply()` 装配 |
-| [lib/routes.ts](lib/routes.ts) | prefix 路由 `/api/morehao/skills-console/*`，自定义头鉴权，统一 JSON 错误码 |
+| [lib/routes.ts](lib/routes.ts) | prefix 路由 `/api/penguy-up/skills-console/*`，自定义头鉴权，统一 JSON 错误码 |
 | [lib/core/service.ts](lib/core/service.ts) | 业务编排：清单 / 安装 / 更新 / 回滚 / 删除 / 启停 / 接管 / 订阅 |
 | [lib/core/paths.ts](lib/core/paths.ts) | 路径与 env 覆盖（`HOME` / `XDG_CONFIG_HOME` / `DSH_HOME` / `DSH_SKILLS_CONSOLE_HOME`） |
 | [lib/core/installer.ts](lib/core/installer.ts) | native installer：staging → 原子 promote → v3 lock 事务；安装/更新/删除的 canonical/lock 写入者 |
@@ -156,12 +156,12 @@
 
 要让宿主跑工作树而不是 npm 包（验证未发布的 `client/**` / `lib/**` 改动）时，按下面五步走完。**验证结束（通过或放弃）都必须回退并删除 link，`link:` 不允许留在 profile 里。**
 
-1. **准备**：先 `npm run build`（两个 half 都产物化；`dsh plugin add` 不会替你构建）。把 profile 的 `package.json`、`pnpm-lock.yaml` 与已装的 `@morehao/dsh-skills-console` 备份到 `.dsh/link-preview/`。
+1. **准备**：先 `npm run build`（两个 half 都产物化；`dsh plugin add` 不会替你构建）。把 profile 的 `package.json`、`pnpm-lock.yaml` 与已装的 `@penguy-up/dsh-skills-console` 备份到 `.dsh/link-preview/`。
 2. **装 link**：`dsh plugin --profile <profile> add "link:$PWD"`。沙箱里会报 `EPERM ... package.json.lock`，在终端用更高权限重跑；不要手写 profile 的 `package.json`。
-3. **校验**：`realpath ~/.dsh/profiles/<profile>/node_modules/@morehao/dsh-skills-console` 指向本仓；profile `package.json` 的值为 `link:<本仓绝对路径>`；根 `client.js` 与工作树一致。
+3. **校验**：`realpath ~/.dsh/profiles/<profile>/node_modules/@penguy-up/dsh-skills-console` 指向本仓；profile `package.json` 的值为 `link:<本仓绝对路径>`；根 `client.js` 与工作树一致。
 4. **生效 + 验证**：**完全退出宿主再重开**（⌘Q；profile bundle 只在启动时装载）。验证期间不切分支、不移动/删除 checkout（`link:` 绑当前工作树）。给用户的验证清单要写清「点哪里、应看到什么」。
 5. **收尾（必做）**：验证通过后立即回退并删除 link：
-   - `dsh plugin --profile <profile> add @morehao/dsh-skills-console@<改动前版本>`；
+   - `dsh plugin --profile <profile> add @penguy-up/dsh-skills-console@<改动前版本>`；
    - 校验：`test -L` 为假、profile `package.json` 与备份一致、装回 `client.js` 不含本次未发布改动、`tar` 等运行时依赖仍可解析；
    - 确认回退无误后删除 `.dsh/link-preview/` 备份目录；
    - 再完全重启宿主，确认界面回到 npm 版；

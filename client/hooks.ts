@@ -29,28 +29,40 @@ export interface ToastItem extends Toast {
 let toastSeq = 0;
 
 /** 清单 / 错误 / 忙碌 / toast：挂载即拉一次 /state，变更动作统一走 run。 */
-export function useSkillsData(lang: string = 'zh') {
+export function useSkillsData(lang: string = 'zh', initialCwd: string | null = null) {
   const [data, setData] = React.useState<SkillsState | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [selectedCwd, setSelectedCwd] = React.useState<string | null>(null);
+  const cwdRef = React.useRef<string | null>(null);
   // 顶部居中状态条是「堆叠」的：连点多个操作不互相覆盖；每条自己定时退出。
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
   const timers = React.useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
-  const reload = React.useCallback(async () => {
+  const reload = React.useCallback(async (options?: { cwd?: string | null }) => {
     try {
+      let currentCwd = cwdRef.current;
+      if (options && 'cwd' in options) {
+        currentCwd = options.cwd ?? null;
+        cwdRef.current = currentCwd;
+        setSelectedCwd(currentCwd);
+      }
+      let url = `/state?lang=${encodeURIComponent(lang || 'zh')}`;
+      if (currentCwd) {
+        url += `&cwd=${encodeURIComponent(currentCwd)}`;
+      }
       // lang 决定后端按哪种语言判定「是否已有简介」（introCached），只影响该展示字段。
-      const next = await apiCall('GET', `/state?lang=${encodeURIComponent(lang || 'zh')}`);
+      const next = await apiCall('GET', url);
       setData(next);
       setError(null);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     }
   }, [lang]);
 
   React.useEffect(() => {
-    void reload();
-  }, [reload]);
+    void reload({ cwd: initialCwd });
+  }, [reload, initialCwd]);
 
   /** 移除一条（手动关 / 定时到）；清掉它的计时器。 */
   const dismissToast = React.useCallback((id: number) => {
@@ -106,7 +118,19 @@ export function useSkillsData(lang: string = 'zh') {
     [reload, setToast],
   );
 
-  return { data, error, busy, toasts, setToast, dismissToast, setBusy, reload, run };
+  return {
+    data,
+    error,
+    busy,
+    toasts,
+    setToast,
+    dismissToast,
+    setBusy,
+    reload,
+    run,
+    selectedCwd,
+    setSelectedCwd,
+  };
 }
 
 /** 页头设置浮层：开关、锚点、按左右余量选边与宽度。 */

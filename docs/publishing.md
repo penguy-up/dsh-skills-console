@@ -1,4 +1,4 @@
-# npm 发包完整流程（`@morehao/dsh-skills-console`）
+# npm 发包完整流程（`@penguy-up/dsh-skills-console`）
 
 > **一句话**：升版本走 PR → 合并后在 `main` 上打**注记** tag → CI 用 OIDC（Trusted Publishing）发布到 npm → 用 tag 注记正文建 GitHub Release。全链路**不需要任何长效 npm token**，也不在本地跑 `npm publish` 发正式版。
 >
@@ -65,7 +65,7 @@ npm login --registry https://registry.npmjs.org
 
 # 2) 发一个 0.0.0 占位包：只占名字，不含仓库源码
 mkdir -p /tmp/placeholder
-printf '{"name":"@morehao/dsh-skills-console","version":"0.0.0","description":"placeholder for OIDC trusted publishing","license":"MIT"}' \
+printf '{"name":"@penguy-up/dsh-skills-console","version":"0.0.0","description":"placeholder for OIDC trusted publishing","license":"MIT"}' \
   > /tmp/placeholder/package.json
 cd /tmp/placeholder && npm publish --registry https://registry.npmjs.org --access public
 ```
@@ -86,9 +86,9 @@ script -q /tmp/pub.log npm publish --registry https://registry.npmjs.org --acces
 ### 3.2 配置 Trusted Publisher（CLI，不用点网页）
 
 ```bash
-npm trust github @morehao/dsh-skills-console \
+npm trust github @penguy-up/dsh-skills-console \
   --file release.yml \
-  --repo morehao/dsh-skills-console \
+  --repo penguy-up/dsh-skills-console \
   --allow-publish -y \
   --registry https://registry.npmjs.org
 ```
@@ -96,7 +96,7 @@ npm trust github @morehao/dsh-skills-console \
 | 参数 | 必须这样填 | 填错的后果 |
 |---|---|---|
 | `--file` | `release.yml`（**文件名**，不是路径） | 与 workflow 的 `name:` 对不上 → OIDC 被拒 |
-| `--repo` | `morehao/dsh-skills-console`（**仓库全名**） | 与 npm 里填的 Repository 不一致 → OIDC 被拒 |
+| `--repo` | `penguy-up/dsh-skills-console`（**仓库全名**） | 与 npm 里填的 Repository 不一致 → OIDC 被拒 |
 | `--allow-publish` | 必须带 | 默认只给 `stage publish`，CI 直接 `npm publish` 会被 403 拒 |
 
 成功输出关键行（记录下来，便于日后核对）：
@@ -104,7 +104,7 @@ npm trust github @morehao/dsh-skills-console \
 ```
 type: github
 file: release.yml
-repository: morehao/dsh-skills-console
+repository: penguy-up/dsh-skills-console
 permissions: publish, stage publish
 ```
 
@@ -114,7 +114,7 @@ permissions: publish, stage publish
 
 ```bash
 curl -s -o /dev/null -w 'version doc: %{http_code}\n' https://registry.npmjs.org/@morehao%2Fdsh-skills-console/0.0.0  # 200
-curl -s https://registry.npmjs.org/-/package/@morehao/dsh-skills-console/dist-tags                                  # {"latest":"0.0.0"}
+curl -s https://registry.npmjs.org/-/package/@penguy-up/dsh-skills-console/dist-tags                                  # {"latest":"0.0.0"}
 npm access list packages morehao --registry https://registry.npmjs.org        # 包在列表里（read-write）
 ```
 
@@ -182,7 +182,7 @@ git push origin v0.2.0
 ```bash
 # 1) 版本是否真的上线（单版本端点最准，且不受 packument 缓存影响）
 curl -s -o /dev/null -w '%{http_code}\n' https://registry.npmjs.org/@morehao%2Fdsh-skills-console/0.2.0   # 期望 200
-curl -s https://registry.npmjs.org/-/package/@morehao/dsh-skills-console/dist-tags                     # {"latest":"0.2.0"}
+curl -s https://registry.npmjs.org/-/package/@penguy-up/dsh-skills-console/dist-tags                     # {"latest":"0.2.0"}
 
 # 2) 产物元信息：文件数 / 体积 / 发布者 / provenance
 curl -s https://registry.npmjs.org/@morehao%2Fdsh-skills-console/0.2.0 \
@@ -192,21 +192,21 @@ curl -s https://registry.npmjs.org/@morehao%2Fdsh-skills-console/0.2.0 \
       console.log('attestations',Object.keys(j.dist.attestations||{}));})"
 
 # 3) 拉下来真的能装（防止 files 白名单漏东西）
-mkdir -p /tmp/packtest && cd /tmp/packtest && npm pack @morehao/dsh-skills-console@0.2.0 --registry https://registry.npmjs.org   # 之后几条若还在跑，先 cd 回仓库
+mkdir -p /tmp/packtest && cd /tmp/packtest && npm pack @penguy-up/dsh-skills-console@0.2.0 --registry https://registry.npmjs.org   # 之后几条若还在跑，先 cd 回仓库
 
 # 4) Release 正文与注记一致
 gh release view v0.2.0 --json tagName,body --jq '{tag:.tagName,len:(.body|length)}'
 git for-each-ref --format='%(contents)' refs/tags/v0.2.0 | tail -n +2 | head -5
 
 # 5) 逐步结论（日志下载受限时用这个）
-gh api repos/morehao/dsh-skills-console/actions/runs/<run-id>/jobs --jq '.jobs[].steps[] | {name, conclusion}'
+gh api repos/penguy-up/dsh-skills-console/actions/runs/<run-id>/jobs --jq '.jobs[].steps[] | {name, conclusion}'
 ```
 
 ### processing 窗口（重要）
 
 npm 对**新包名/新版本**的首次可见有几分钟延迟，且两个读端点不同步：单版本端点多在 2 分钟内出现，完整 packument 要更久（本次实测 0.2.0 单版本端点约 2.5 分钟；0.0.0 的 packument 约 5 分钟）。窗口内的典型表现：
 
-- `POST/PUT` 已返回 `+ @morehao/dsh-skills-console@0.2.0`，CI 绿；
+- `POST/PUT` 已返回 `+ @penguy-up/dsh-skills-console@0.2.0`，CI 绿；
 - 但 `npm view`、完整 packument 仍 404，`dist-tags` 还是旧版本。
 
 **这不是失败**，不要重发、不要动 tag。用单版本端点轮询判断：
@@ -270,8 +270,8 @@ done
 
 | 时间（+08:00） | 事件 | 证据 |
 |---|---|---|
-| 18:13:45 | 本地发 0.0.0 占位包（网页 2FA 授权；非交互 EOTP → 伪 TTY 取 URL） | `+ @morehao/dsh-skills-console@0.0.0`；随后出现 `0.0.0-stage` |
+| 18:13:45 | 本地发 0.0.0 占位包（网页 2FA 授权；非交互 EOTP → 伪 TTY 取 URL） | `+ @penguy-up/dsh-skills-console@0.0.0`；随后出现 `0.0.0-stage` |
 | 18:14:2x | `npm trust github … --allow-publish`（同样走网页授权） | `permissions: publish, stage publish`，`file: release.yml` |
 | 18:17:47 | 推注记 tag `v0.2.0` | run 39938083185 |
-| 18:18:05 | CI OIDC 发布 0.2.0 + 建 Release | `+ @morehao/dsh-skills-console@0.2.0`，provenance 已签 |
+| 18:18:05 | CI OIDC 发布 0.2.0 + 建 Release | `+ @penguy-up/dsh-skills-console@0.2.0`，provenance 已签 |
 | 18:20:39 | 单版本端点转 200；`dist-tags.latest=0.2.0` | 约 2.5 分钟 processing 窗口 |

@@ -18,7 +18,7 @@ export interface RuntimeEntry {
   api: any;
 }
 
-const RUNTIME_KEY = Symbol.for('@morehao/dsh-skills-console/runtime');
+const RUNTIME_KEY = Symbol.for('@penguy-up/dsh-skills-console/runtime');
 
 type RuntimeMap = Map<string, RuntimeEntry>;
 

@@ -177,6 +177,16 @@ export function ChevronLeftIcon({ size = 14 }: { size?: number }): any {
   h('path', { d: 'm15 18-6-6 6-6' }));
 }
 
+/** 下拉 / 展开箭头。 */
+export function ChevronDownIcon({ size = 12 }: { size?: number }): any {
+  return h('svg', {
+    className: 'dshsc-chevron',
+    width: size, height: size, viewBox: '0 0 24 24', ...STROKE_ICON, 'aria-hidden': true,
+    style: { display: 'block' },
+  },
+  h('path', { d: 'm6 9 6 6 6-6' }));
+}
+
 /** 文件。 */
 export function FileIcon({ size = 12 }: { size?: number }): any {
   return h('svg', {
