@@ -53,6 +53,127 @@ export function useSkillActions({ t, rows, reload, run, setBusy, setToast, setMo
     });
   }
 
+  /**
+   * 按来源批量设置调用策略：auto / manual / hidden。
+   * 调 POST /skills/batch-invocation，聚合提示成功数、保留作者声明数与失败数。
+   */
+  async function batchSetInvocation(rows: SkillRow[], mode: string, sourceTitle?: string) {
+    if (!rows || rows.length === 0) return;
+    const label = sourceTitle ? `batch-invocation:${sourceTitle}` : 'batch-invocation';
+    await run(label, async () => {
+      const names = rows.map((r) => r.name);
+      const result = await apiCall<{
+        ok?: boolean;
+        mode?: string;
+        succeeded?: string[];
+        skipped?: { name: string; reason: string }[];
+        failed?: { name: string; message: string; code: string }[];
+      }>('POST', '/skills/batch-invocation', { names, mode });
+
+      const succeededCount = result.succeeded?.length ?? 0;
+      const skippedCount = result.skipped?.length ?? 0;
+      const failedCount = result.failed?.length ?? 0;
+      const modeLabel = t(`policy.${mode}`) || mode;
+
+      let text = t('batch.toastDone').replace('{count}', String(succeededCount)).replace('{mode}', modeLabel);
+      if (skippedCount > 0) {
+        text += ` ${t('batch.toastSkipped').replace('{count}', String(skippedCount))}`;
+      }
+      if (failedCount > 0) {
+        text += ` ${t('batch.toastFailed').replace('{count}', String(failedCount))}`;
+      }
+
+      setToast({
+        kind: failedCount > 0 ? 'err' : 'ok',
+        text,
+      });
+      return result;
+    });
+  }
+
+  /**
+   * 项目级隔离启停：单技能设置。
+   * mode: auto / manual / hidden / default（default 为恢复继承全局设置）。
+   */
+  async function setProjectInvocation(cwd: string, row: SkillRow, mode: string) {
+    if (!cwd) return;
+    await run(`project-invocation:${row.name}`, async () => {
+      const result = await apiCall<{
+        ok?: boolean;
+        projectRoot?: string;
+        projectName?: string;
+        name?: string;
+        mode?: string;
+      }>('POST', '/project/invocation', { cwd, name: row.name, mode });
+
+      const project = result.projectName
+        || (result.projectRoot ? result.projectRoot.split(/[/\\]/).filter(Boolean).pop() : '')
+        || cwd.split(/[/\\]/).filter(Boolean).pop()
+        || cwd;
+
+      if (mode === 'default') {
+        setToast({
+          kind: 'ok',
+          text: t('scope.toastReset')
+            .replace('{name}', row.name)
+            .replace('{project}', project),
+        });
+      } else {
+        const modeLabel = t(`policy.${mode}`) || mode;
+        setToast({
+          kind: 'ok',
+          text: t('scope.toastSet')
+            .replace('{name}', row.name)
+            .replace('{project}', project)
+            .replace('{mode}', modeLabel),
+        });
+      }
+      return result;
+    });
+  }
+
+  /**
+   * 项目级隔离启停：批量设置。
+   */
+  async function batchSetProjectInvocation(cwd: string, rows: SkillRow[], mode: string) {
+    if (!cwd || !rows || rows.length === 0) return;
+    await run(`project-batch-invocation:${mode}`, async () => {
+      const names = rows.map((r) => r.name);
+      const result = await apiCall<{
+        ok?: boolean;
+        projectRoot?: string;
+        projectName?: string;
+        names?: string[];
+        mode?: string;
+      }>('POST', '/project/batch-invocation', { cwd, names, mode });
+
+      const count = result.names?.length ?? rows.length;
+      const project = result.projectName
+        || (result.projectRoot ? result.projectRoot.split(/[/\\]/).filter(Boolean).pop() : '')
+        || cwd.split(/[/\\]/).filter(Boolean).pop()
+        || cwd;
+
+      if (mode === 'default') {
+        setToast({
+          kind: 'ok',
+          text: t('scope.toastReset')
+            .replace('{name}', `${count} ${t('skillCount')}`)
+            .replace('{project}', project),
+        });
+      } else {
+        const modeLabel = t(`policy.${mode}`) || mode;
+        setToast({
+          kind: 'ok',
+          text: t('scope.toastSet')
+            .replace('{name}', `${count} ${t('skillCount')}`)
+            .replace('{project}', project)
+            .replace('{mode}', modeLabel),
+        });
+      }
+      return result;
+    });
+  }
+
   async function unpark(row: SkillRow) {
     await run(`unpark:${row.name}`, async () => {
       const result = await apiCall('POST', `/skills/${encodeURIComponent(row.name)}/unpark`, {});
@@ -245,6 +366,9 @@ export function useSkillActions({ t, rows, reload, run, setBusy, setToast, setMo
     adopt,
     toggleMode,
     setInvocation,
+    batchSetInvocation,
+    setProjectInvocation,
+    batchSetProjectInvocation,
     requestUnpark,
     requestUpdate,
     updateAll,

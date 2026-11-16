@@ -13,6 +13,7 @@ import path from 'node:path';
  */
 
 export const SHADOW_MARKER = '.dsh-skills-console.json';
+// 仅识别上游旧版本留下的迁移桩；新版本不再创建 shadow。
 export const SHADOW_TOOL = '@morehao/dsh-skills-console';
 export const SHADOW_DESCRIPTION = '已停用（由 DSH 技能控制台生成，请勿使用）';
 

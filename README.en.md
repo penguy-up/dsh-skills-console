@@ -4,9 +4,11 @@
 
 [简体中文](README.md) · **English**
 
-[![npm version](https://img.shields.io/npm/v/@morehao/dsh-skills-console.svg)](https://www.npmjs.com/package/@morehao/dsh-skills-console) [![check](https://github.com/morehao/dsh-skills-console/actions/workflows/check.yml/badge.svg)](https://github.com/morehao/dsh-skills-console/actions/workflows/check.yml) [![license](https://img.shields.io/npm/l/@morehao/dsh-skills-console.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/@penguy-up/dsh-skills-console.svg)](https://www.npmjs.com/package/@penguy-up/dsh-skills-console) [![check](https://github.com/penguy-up/dsh-skills-console/actions/workflows/check.yml/badge.svg)](https://github.com/penguy-up/dsh-skills-console/actions/workflows/check.yml) [![license](https://img.shields.io/npm/l/@penguy-up/dsh-skills-console.svg)](LICENSE)
 
 The skills console for DSH (DeepSeek Harness): **install, update, remove, toggle and share skills with other agents — plus a subscription list**.
+
+This project is an enhanced fork of [`@morehao/dsh-skills-console`](https://github.com/morehao/dsh-skills-console); its install and runtime package identity is `@penguy-up/dsh-skills-console`.
 
 It gathers the skills on your machine into one list: what you have, where it came from, who can use it, and whether it is up to date. Turn on what you use, turn off what you don't; when another agent needs one, link it over with a click — the skill itself always stays in one place.
 
@@ -31,31 +33,31 @@ It gathers the skills on your machine into one list: what you have, where it cam
 | View | Open a skill's body and files read-only: rendered / raw toggle, directory tree, single-file preview, plus source, hash and sharing info |
 | AI intro | A ✨ per row opens a model-written summary of what the skill does and when to use it; only `SKILL.md` and the file-name list are sent, results are cached locally, and unchanged content is not regenerated |
 | Subscriptions | Follow upstream changes of an `owner/repo`; snapshots only, no skill download. Expand an entry to see the author's own description, or let the model write an AI intro before deciding. ref / subdirectory optional; an empty ref follows the default branch |
-| Scope | Manages user-level shared skills; per-project toggling is not supported yet. When a same-named copy exists in a project or user directory, that copy still wins visibility |
+| Scope | Manages both globally shared and current-project skills; project policies write project overrides without modifying global skills |
 
 ## Screenshots
 
-Screenshots are from a real DSH Web session on v0.5.2 (dark theme). All assets live in [`assets/`](https://github.com/morehao/dsh-skills-console/tree/main/assets) (bitmap icons and UI screenshots) and are not published to npm, so they are referenced by absolute URL and render on both GitHub and the npm page.
+Screenshots are from a real DSH Web session on v0.5.2 (dark theme). All assets live in [`assets/`](https://github.com/penguy-up/dsh-skills-console/tree/main/assets) (bitmap icons and UI screenshots) and are not published to npm, so they are referenced by absolute URL and render on both GitHub and the npm page.
 
 **Installed list**: source, invocation policy, shared agents and update status in one screen; the top switches between "Installed" and "Subscriptions".
 
-![Installed list: source, invocation policy, shared agents and update status in one screen](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-1-installed.png)
+![Installed list: source, invocation policy, shared agents and update status in one screen](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-1-installed.png)
 
 **Read-only viewer**: the list stays put while the right-hand drawer renders `SKILL.md`; switch to raw, browse the file tree and info, or open a full page.
 
-![Read-only viewer: the right drawer renders SKILL.md, with raw text and the file tree](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-2-viewer.png)
+![Read-only viewer: the right drawer renders SKILL.md, with raw text and the file tree](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-2-viewer.png)
 
 **AI intro**: click the ✨ in a row for a model summary of what the skill can do and when to use it; it opens as a centered dialog like the other modals, and once generated it reads from the local cache.
 
-![AI intro: a centered dialog shows the model-generated capability summary](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-3-intro.png)
+![AI intro: a centered dialog shows the model-generated capability summary](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-3-intro.png)
 
 **Subscriptions**: only upstream snapshots of `owner/repo`; expand an entry to see how many skills the repo has, which are installed and their status.
 
-![Subscriptions: expand a repo to see its skills and install status](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-4-subscriptions.png)
+![Subscriptions: expand a repo to see its skills and install status](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-4-subscriptions.png)
 
 **Add subscription**: enter `owner/repo` or a GitHub URL; ref and subdirectory are optional; follow only, no skill download.
 
-![Add subscription: fill in source, ref and subdirectory](https://raw.githubusercontent.com/morehao/dsh-skills-console/main/assets/screenshot-5-subscribe-dialog.png)
+![Add subscription: fill in source, ref and subdirectory](https://raw.githubusercontent.com/penguy-up/dsh-skills-console/main/assets/screenshot-5-subscribe-dialog.png)
 
 ## Interface
 
@@ -64,7 +66,7 @@ Screenshots are from a real DSH Web session on v0.5.2 (dark theme). All assets l
 - **Five actions per row**: toggle, view, update, share settings, delete; the ✨ next to a skill name opens the AI intro; "View" is hidden on narrow panels, and the skill name itself remains the entry point. Status labels cover up to date / update available / changed since install / removed upstream / broken link.
 - **No layout jumps on narrow panels**: the action group wraps naturally with panel width and the plugin name always stays whole; the list switches to two columns by width; scrolling happens only in the list area, so switching tabs or resizing never flips the whole page.
 - **Many agents don't crowd**: at most 3 are shown per row and the rest fold into `+n`; hover or focus reveals all.
-- **Findable**: search by name / source / agent, filter by "updates / not checked / disabled", view flat or grouped by agent.
+- **Findable**: search by name / source / agent, filter by "updates / not checked / disabled", and view flat, grouped by source, or grouped by agent.
 - **Upstream is the source**: every install comes from a GitHub repo, so the source (`owner/repo`) is the upstream. Anything installed can be update-checked; there is no "no upstream" state. "Not checked" only means no upstream verdict was obtained this time (rate limit, network, repo 404, etc.) and will be retried next time. Subscriptions are just a scheduling vehicle for batched/periodic probing, not a precondition for checking updates.
 
 ## Viewing skill content
@@ -130,7 +132,7 @@ Or add it to the profile's `cordis.patch.yml`:
 ```yaml
 - insert:
     - id: dsh-skills-console
-      name: '@morehao/dsh-skills-console'
+      name: '@penguy-up/dsh-skills-console'
 ```
 
 The panel shows up in DSH Web's settings page / sidebar.
@@ -184,7 +186,7 @@ Skill install / update is exposed as a stable package API that other dsh plugins
 `import` and reuse — **without enabling the Skills Console plugin**, and without HTTP:
 
 ```js
-import { createSkillsConsole } from '@morehao/dsh-skills-console/api';
+import { createSkillsConsole } from '@penguy-up/dsh-skills-console/api';
 
 const api = createSkillsConsole(); // reuses the plugin instance when enabled; otherwise a headless writer
 const installed = await api.list({ names: ['git-kit', 'handoff', 'disk-cleanup'] });
@@ -208,7 +210,6 @@ Source layout, test strategy and local `link:` verification are in [docs/develop
 - No image / binary preview.
 - No cross-machine sync, and no token is ever written to disk.
 - No process-level hiding: toggling in Auto only affects DSH; Fully disabled renames `SKILL.md`, so other agents that read that directory can't see it either, but it does not prevent external writes from putting the file back.
-- No project-level toggling: same-named skills in projects stay visible per DSH's precedence.
 - No taking over the host preset layer or skill sources bundled with other plugins; diagnostics mark them as blind spots rather than pretending to support them.
 
 ## License

@@ -44,7 +44,7 @@ export const PLUGIN_PKG_URL = new URL('../../package.json', import.meta.url);
 /** 插件身份：包名与当前版本。从 package.json 读一次，避免和 page 头硬编码漂移。 */
 export const PLUGIN_META = createPluginMeta({
   pkgUrl: PLUGIN_PKG_URL,
-  defaultName: '@morehao/dsh-skills-console',
+  defaultName: '@penguy-up/dsh-skills-console',
 });
 
 /** 手动更新命令（前端展示/复制用），按已发布包 + 当前 profile 拼。 */

@@ -1,5 +1,5 @@
 /**
- * 跨插件公共 API `@morehao/dsh-skills-console/api`（设计 §3）。
+ * 跨插件公共 API `@penguy-up/dsh-skills-console/api`（设计 §3）。
  *
  * 两条入口：
  * - `createPublicApi(service)`：唯一实现，把已装配好的 core service 包成稳定契约；

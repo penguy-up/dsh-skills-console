@@ -12,7 +12,7 @@
 
 ```
 lib/index.ts        Host 入口：装配 paths / state / registry / installer / service / routes
-lib/routes.ts       HTTP 路由（prefix /api/morehao/skills-console）
+lib/routes.ts       HTTP 路由（prefix /api/penguy-up/skills-console）
 lib/core/           领域逻辑（TS）：清单、软链、native installer（下载/解压/发现/tree/lock）、
                     更新、删除、订阅、哈希、状态、日志、Atom/codeload 限流兜底
 lib/contract/       跨 Host/Client 的类型契约（纯 .d.ts，不产出、不进 dist）
@@ -91,7 +91,7 @@ npm run check       # 类型检查 + 循环 + 构建 + 命名 + 打包 + Release
 
 ## 5. 本地验证（link: 安装）
 
-把某个 profile 里的 `@morehao/dsh-skills-console` 换成指向本仓的 `link:`，用真实宿主验证 Host 接口与 Web Client；验证完按 §5.3 回退。
+把某个 profile 里的 `@penguy-up/dsh-skills-console` 换成指向本仓的 `link:`，用真实宿主验证 Host 接口与 Web Client；验证完按 §5.3 回退。
 
 ### 5.1 安装
 
@@ -100,7 +100,7 @@ PROFILE=~/.dsh/profiles/desktop              # 换成要验证的 profile
 mkdir -p .dsh/link-preview
 cp "$PROFILE/package.json" .dsh/link-preview/package.json.bak
 cp "$PROFILE/pnpm-lock.yaml" .dsh/link-preview/pnpm-lock.yaml.bak
-cp -R "$PROFILE/node_modules/@morehao/dsh-skills-console" .dsh/link-preview/dsh-skills-console-installed
+cp -R "$PROFILE/node_modules/@penguy-up/dsh-skills-console" .dsh/link-preview/dsh-skills-console-installed
 
 dsh plugin --profile desktop add "link:$PWD"
 ```
@@ -108,8 +108,8 @@ dsh plugin --profile desktop add "link:$PWD"
 `dsh plugin` 把参数转发给 profile 目录里的 pnpm；`link:` 装出来是指向本仓的软链，不是拷贝。校验：
 
 ```bash
-readlink ~/.dsh/profiles/desktop/node_modules/@morehao/dsh-skills-console   # 应指向本仓
-grep '"@morehao/dsh-skills-console"' ~/.dsh/profiles/desktop/package.json   # 值应为 link:/...
+readlink ~/.dsh/profiles/desktop/node_modules/@penguy-up/dsh-skills-console   # 应指向本仓
+grep '"@penguy-up/dsh-skills-console"' ~/.dsh/profiles/desktop/package.json   # 值应为 link:/...
 ```
 
 ### 5.2 生效
@@ -123,7 +123,7 @@ grep '"@morehao/dsh-skills-console"' ~/.dsh/profiles/desktop/package.json   # �
 
 ```bash
 # 方式一：从 npm 重装验证前的版本（把 0.2.1 换成实际版本）
-dsh plugin --profile desktop add @morehao/dsh-skills-console@0.2.1
+dsh plugin --profile desktop add @penguy-up/dsh-skills-console@0.2.1
 
 # 方式二：用备份还原（package.json / lock 被改乱，或方式一失败时）
 cp .dsh/link-preview/package.json.bak ~/.dsh/profiles/desktop/package.json

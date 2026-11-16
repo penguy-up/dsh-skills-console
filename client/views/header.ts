@@ -4,7 +4,7 @@ import type { RefObject } from 'react';
 
 import { h } from '../host.js';
 import { GITHUB_URL } from '../api.js';
-import type { PluginInfo, SettingsPlacement } from '../api.js';
+import type { PluginInfo, SettingsPlacement, WorkspaceItem } from '../api.js';
 import type { Translate } from '../copy.js';
 import { Logo, GitHubIcon, GearIcon, RefreshIcon } from '../icons.js';
 import { writePendingUpdate } from '../update-store.js';
@@ -54,6 +54,9 @@ export interface HeaderProps {
   placementBusy: string | null;
   readOnly: boolean;
   pluginUpdate?: HeaderPluginUpdate | null;
+  workspaces?: WorkspaceItem[];
+  selectedCwd?: string | null;
+  onSelectScope?: (cwd: string | null) => void;
   onCheckUpdate: () => void;
   onToggleSettings: () => void;
   onChangePlacement: (next: string) => void;
@@ -67,7 +70,7 @@ export function Header({
   t, page, plugin, writable,
   autoLinkLabel, autoLinkCount, tab,
   settingsOpen, settingsRef, settingsPlacement, placement, placementBusy, readOnly,
-  pluginUpdate, onCheckUpdate,
+  pluginUpdate, workspaces, selectedCwd, onSelectScope, onCheckUpdate,
   onToggleSettings, onChangePlacement,
   onOpenAutoLink, onAddSkill, onAddSubscription, onOpenAbout,
 }: HeaderProps) {
@@ -250,6 +253,27 @@ export function Header({
         h('p', { className: 'dshsc-sub' }, t('section.subtitle')))),
     // 右侧只留业务动作；主按钮仍在最右
     h('div', { className: 'dshsc-head-actions' },
+      h('div', { className: 'dshsc-scope-selector', title: selectedCwd ? t('scope.project') : t('scope.globalDesc') },
+        h('select', {
+          className: 'dshsc-scope-select',
+          value: selectedCwd || '',
+          'aria-label': t('scope.select'),
+          title: t('scope.select'),
+          onChange: (e: any) => onSelectScope?.(e.target.value || null),
+        },
+          h('option', { value: '', title: t('scope.globalDesc') }, t('scope.global')),
+          (workspaces && workspaces.length > 0)
+            ? h('optgroup', { label: t('scope.project') },
+                workspaces.map((ws) =>
+                  h('option', { key: ws.path || ws.id, value: ws.path }, ws.title || ws.path),
+                ),
+              )
+            : null,
+          selectedCwd && !(workspaces || []).some((ws) => ws.path === selectedCwd)
+            ? h('option', { key: selectedCwd, value: selectedCwd }, selectedCwd.split(/[/\\]/).filter(Boolean).pop() || selectedCwd)
+            : null,
+        ),
+      ),
       h('button', {
         className: 'dshsc-btn',
         disabled: !writable,

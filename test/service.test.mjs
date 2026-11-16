@@ -404,7 +404,7 @@ test('删除：体检拦截真实目录；通过后进回收站并清记账', as
   await service.install({ source: 'morehao/ai-kit', skills: ['alpha'], targets: ['dsh-global', 'agent:claude-code'] });
 
   const claudeLink = path.join(home, '.claude', 'skills', 'alpha');
-  fs.rmSync(claudeLink, { force: true });
+  fs.rmSync(claudeLink, { recursive: true, force: true });
   fs.mkdirSync(claudeLink);
   fs.writeFileSync(path.join(claudeLink, 'SKILL.md'), 'mine');
 
@@ -1810,6 +1810,184 @@ test('作者声明但 state 还是 auto：展示为只读 manual，不改 state�
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('batchSetInvocation：批量切换 manual / hidden / auto；幂等调用直接 succeeded', async () => {
+  let invalidatedCount = 0;
+  const { root, paths, store, service } = setup({
+    invalidatePolicies: async () => {
+      invalidatedCount += 1;
+    },
+  });
+  await service.install({ source: 'morehao/ai-kit', skills: ['alpha'] });
+  await service.install({ source: 'morehao/ai-kit', skills: ['beta'] });
+
+  const fileA = path.join(paths.canonical, 'alpha', 'SKILL.md');
+  const fileB = path.join(paths.canonical, 'beta', 'SKILL.md');
+  const beforeA = fs.readFileSync(fileA, 'utf8');
+  const beforeB = fs.readFileSync(fileB, 'utf8');
+
+  // 1. 批量设为 manual
+  invalidatedCount = 0;
+  const res1 = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'manual' });
+  assert.equal(res1.ok, true);
+  assert.equal(res1.mode, 'manual');
+  assert.deepEqual(res1.succeeded, ['alpha', 'beta']);
+  assert.deepEqual(res1.skipped, []);
+  assert.deepEqual(res1.failed, []);
+  assert.equal(invalidatedCount, 1, '整批结束后统一调用一次 invalidatePolicies');
+  assert.match(fs.readFileSync(fileA, 'utf8'), /disable-model-invocation: true/);
+  assert.match(fs.readFileSync(fileB, 'utf8'), /disable-model-invocation: true/);
+  assert.equal(store.findInstall('alpha').mode, 'manual');
+  assert.equal(store.findInstall('beta').mode, 'manual');
+
+  // 2. 幂等再次设为 manual
+  const res1Again = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'manual' });
+  assert.deepEqual(res1Again.succeeded, ['alpha', 'beta']);
+
+  // 3. 批量设为 hidden (park)
+  invalidatedCount = 0;
+  const res2 = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'hidden' });
+  assert.equal(res2.ok, true);
+  assert.equal(res2.mode, 'hidden');
+  assert.deepEqual(res2.succeeded, ['alpha', 'beta']);
+  assert.equal(invalidatedCount, 1);
+  assert.equal(fs.existsSync(fileA), false);
+  assert.equal(fs.existsSync(fileB), false);
+  assert.equal(fs.existsSync(path.join(paths.canonical, 'alpha', 'SKILL.md.disabled')), true);
+  assert.equal(fs.existsSync(path.join(paths.canonical, 'beta', 'SKILL.md.disabled')), true);
+  assert.equal(store.findInstall('alpha').mode, 'hidden');
+  assert.equal(store.findInstall('beta').mode, 'hidden');
+
+  // 4. 幂等再次设为 hidden
+  const res2Again = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'hidden' });
+  assert.deepEqual(res2Again.succeeded, ['alpha', 'beta']);
+
+  // 5. 批量设为 auto (自动从 hidden unpark 并改回 auto)
+  invalidatedCount = 0;
+  const res3 = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'auto' });
+  assert.equal(res3.ok, true);
+  assert.equal(res3.mode, 'auto');
+  assert.deepEqual(res3.succeeded, ['alpha', 'beta']);
+  assert.equal(invalidatedCount, 1);
+  assert.equal(fs.existsSync(fileA), true);
+  assert.equal(fs.existsSync(fileB), true);
+  assert.equal(fs.readFileSync(fileA, 'utf8'), beforeA);
+  assert.equal(fs.readFileSync(fileB, 'utf8'), beforeB);
+  assert.equal(store.findInstall('alpha').mode, 'auto');
+  assert.equal(store.findInstall('beta').mode, 'auto');
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('batchSetInvocation：从 hidden 批量恢复到 manual（自动 unpark、写 frontmatter 与备份、作者声明不覆盖）', async () => {
+  const { root, paths, store, service } = setup();
+  await service.install({ source: 'morehao/ai-kit', skills: ['alpha'] });
+  await service.install({ source: 'morehao/ai-kit', skills: ['beta'] });
+
+  const fileA = path.join(paths.canonical, 'alpha', 'SKILL.md');
+  const fileB = path.join(paths.canonical, 'beta', 'SKILL.md');
+  const authorText = '---\nname: beta\ndescription: author demo\ndisable-model-invocation: true\n---\nauthor body\n';
+  fs.writeFileSync(fileB, authorText);
+
+  // 1. 先全部停用 (hidden)
+  const hideRes = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'hidden' });
+  assert.equal(hideRes.ok, true);
+  assert.deepEqual(hideRes.succeeded, ['alpha', 'beta']);
+  assert.equal(fs.existsSync(fileA), false);
+  assert.equal(fs.existsSync(fileB), false);
+  assert.equal(fs.existsSync(path.join(paths.canonical, 'alpha', 'SKILL.md.disabled')), true);
+  assert.equal(fs.existsSync(path.join(paths.canonical, 'beta', 'SKILL.md.disabled')), true);
+
+  // 2. hidden 状态下批量转 manual：应自动 unpark，alpha 写入插件 frontmatter 并备份，beta 保留作者声明
+  const manualRes = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'manual' });
+  assert.equal(manualRes.ok, true);
+  assert.deepEqual(manualRes.succeeded, ['alpha', 'beta']);
+  assert.deepEqual(manualRes.skipped, []);
+  assert.deepEqual(manualRes.failed, []);
+
+  // 校验 alpha：已恢复文件，注入了 disable-model-invocation: true，且生成了备份
+  assert.equal(fs.existsSync(fileA), true);
+  assert.match(fs.readFileSync(fileA, 'utf8'), /disable-model-invocation: true/);
+  const backupDir = path.join(paths.backupsDir, 'invocation');
+  const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir).filter((f) => f.startsWith('alpha-') && f.endsWith('.md')) : [];
+  assert.ok(backups.length > 0, 'alpha 写入 manual 前应生成备份文件');
+  assert.equal(store.findInstall('alpha').mode, 'manual');
+  assert.equal(store.findInstall('alpha').manual.origin, 'plugin');
+
+  // 校验 beta：已恢复文件，内容保留作者声明，不改写正文
+  assert.equal(fs.existsSync(fileB), true);
+  assert.equal(fs.readFileSync(fileB, 'utf8'), authorText, '作者声明原样保留');
+  assert.equal(store.findInstall('beta').mode, 'manual');
+  assert.equal(store.findInstall('beta').manual.origin, 'author');
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('batchSetInvocation：作者声明 manual 在 target auto 时跳过并进 skipped', async () => {
+  const { root, paths, store, service } = setup();
+  await service.install({ source: 'morehao/ai-kit', skills: ['alpha'] });
+  await service.install({ source: 'morehao/ai-kit', skills: ['beta'] });
+
+  const fileA = path.join(paths.canonical, 'alpha', 'SKILL.md');
+  const authorText = '---\nname: alpha\ndescription: demo\ndisable-model-invocation: true\n---\nbody\n';
+  fs.writeFileSync(fileA, authorText);
+
+  // 把 alpha 设为 manual (author)，beta 设为 manual (plugin)
+  await service.setInvocation({ name: 'alpha', mode: 'manual' });
+  await service.setInvocation({ name: 'beta', mode: 'manual' });
+
+  // 批量转 auto：alpha 应当跳过，beta 应当成功
+  const res = await service.batchSetInvocation({ names: ['alpha', 'beta'], mode: 'auto' });
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.succeeded, ['beta']);
+  assert.deepEqual(res.skipped, [{ name: 'alpha', reason: 'author-declared' }]);
+  assert.deepEqual(res.failed, []);
+  assert.equal(fs.readFileSync(fileA, 'utf8'), authorText, '作者声明原样保留');
+  assert.equal(store.findInstall('alpha').mode, 'manual');
+  assert.equal(store.findInstall('beta').mode, 'auto');
+
+  // 当 alpha 处于 hidden 时，批量转 auto 应当先 unpark，但跳过恢复 auto
+  await service.setInvocation({ name: 'alpha', mode: 'hidden' });
+  assert.equal(store.findInstall('alpha').mode, 'hidden');
+  const resHidden = await service.batchSetInvocation({ names: ['alpha'], mode: 'auto' });
+  assert.deepEqual(resHidden.skipped, [{ name: 'alpha', reason: 'author-declared' }]);
+  assert.equal(fs.existsSync(fileA), true, '已恢复文件');
+  assert.equal(fs.readFileSync(fileA, 'utf8'), authorText, '内容仍为作者声明');
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('batchSetInvocation：模式校验与单技能异常捕获进 failed，不中断整批', async () => {
+  const { root, paths, store, service } = setup();
+  await service.install({ source: 'morehao/ai-kit', skills: ['alpha'] });
+
+  // 非法 mode
+  await assert.rejects(
+    () => service.batchSetInvocation({ names: ['alpha'], mode: 'invalid' }),
+    (error) => error.code === 'error.skills.bad-mode',
+  );
+
+  // 非法 names
+  await assert.rejects(
+    () => service.batchSetInvocation({ names: 'alpha', mode: 'manual' }),
+    (error) => error.code === 'error.skills.bad-request',
+  );
+
+  // 批处理中混入非法名、未安装技能
+  const res = await service.batchSetInvocation({
+    names: ['alpha', 'bad..name', 'not-installed'],
+    mode: 'manual',
+  });
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.succeeded, ['alpha']);
+  assert.equal(res.failed.length, 2);
+  assert.equal(res.failed[0].name, 'bad..name');
+  assert.equal(res.failed[0].code, 'error.skills.not-found');
+  assert.equal(res.failed[1].name, 'not-installed');
+  assert.equal(res.failed[1].code, 'error.skills.not-managed');
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 // ---- 定时上游检测（runAutoCheck） -----------------------------------------
 
 test('自动检测：无订阅/无安装 → 不联网直接跳过', async () => {
@@ -1944,5 +2122,100 @@ test('诊断：没有 registrySkillsProvider 时 dshRegistry 为空，不影响�
   const { root, service } = setup();
   const report = await service.diagnostics();
   assert.deepEqual(report.dshRegistry, { available: false, complete: false, agents: 0, skills: [] });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('service：setProjectInvocation 与 batchSetProjectInvocation 校验、写入及 getState 回显', async () => {
+  let invalidated = 0;
+  const { root, paths, service } = setup({
+    invalidatePolicies: async () => {
+      invalidated += 1;
+    },
+  });
+
+  // 准备一个假的项目目录
+  const projectDir = path.join(root, 'my-repo');
+  fs.mkdirSync(path.join(projectDir, '.git'), { recursive: true });
+
+  // 安装一个技能
+  await service.install({ source: 'morehao/ai-kit', skills: ['alpha'] });
+
+  // 1. cwd 校验：缺失或非字符串抛 bad-request
+  await assert.rejects(
+    () => service.setProjectInvocation({ name: 'alpha', mode: 'hidden' }),
+    (err) => err.code === 'error.skills.bad-request',
+  );
+
+  // 2. cwd 不是项目目录（没有 .git）抛 not-in-project
+  const nonProjectDir = path.join(root, 'not-a-repo');
+  fs.mkdirSync(nonProjectDir, { recursive: true });
+  await assert.rejects(
+    () => service.setProjectInvocation({ cwd: nonProjectDir, name: 'alpha', mode: 'hidden' }),
+    (err) => err.code === 'error.skills.not-in-project',
+  );
+
+  // 3. 非法 mode
+  await assert.rejects(
+    () => service.setProjectInvocation({ cwd: projectDir, name: 'alpha', mode: 'invalid' }),
+    (err) => err.code === 'error.skills.bad-mode',
+  );
+
+  // 4. setProjectInvocation 成功调用
+  const setRes = await service.setProjectInvocation({
+    cwd: projectDir,
+    name: 'alpha',
+    mode: 'hidden',
+  });
+  assert.equal(setRes.ok, true);
+  assert.equal(setRes.projectRoot, projectDir);
+  assert.equal(setRes.name, 'alpha');
+  assert.equal(setRes.mode, 'hidden');
+  assert.equal(invalidated, 1, '触发了一次策略失效');
+
+  // 5. getState 校验：包含 projectConfig 与 installs[].projectOverride
+  const stateWithProject = await service.getState({ cwd: projectDir });
+  assert.ok(stateWithProject.projectConfig, '存在 projectConfig');
+  assert.equal(stateWithProject.projectConfig.projectRoot, projectDir);
+  assert.equal(stateWithProject.projectConfig.projectName, 'my-repo');
+  assert.equal(stateWithProject.projectConfig.overrides.alpha.mode, 'hidden');
+
+  const alphaRow = stateWithProject.installs.find((r) => r.name === 'alpha');
+  assert.ok(alphaRow);
+  assert.equal(alphaRow.projectOverride.mode, 'hidden');
+
+  // 在项目外部的 getState：projectConfig 为 null，projectOverride 为 null
+  const stateOutside = await service.getState({});
+  assert.equal(stateOutside.projectConfig, null);
+  const alphaRowOutside = stateOutside.installs.find((r) => r.name === 'alpha');
+  assert.equal(alphaRowOutside.projectOverride, null);
+
+  // 6. batchSetProjectInvocation 批量调用
+  const batchRes = await service.batchSetProjectInvocation({
+    cwd: projectDir,
+    names: ['alpha', 'beta'],
+    mode: 'auto',
+  });
+  assert.equal(batchRes.ok, true);
+  assert.equal(batchRes.projectRoot, projectDir);
+  assert.deepEqual(batchRes.names, ['alpha', 'beta']);
+  assert.equal(batchRes.mode, 'auto');
+  assert.equal(invalidated, 2, '再次触发策略失效');
+
+  // 校验写盘后的配置
+  const stateAfterBatch = await service.getState({ cwd: projectDir });
+  assert.equal(stateAfterBatch.projectConfig.overrides.alpha.mode, 'auto');
+  assert.equal(stateAfterBatch.projectConfig.overrides.beta.mode, 'auto');
+
+  // 7. mode === 'default' 清除 override
+  await service.setProjectInvocation({
+    cwd: projectDir,
+    name: 'alpha',
+    mode: 'default',
+  });
+  const stateAfterDefault = await service.getState({ cwd: projectDir });
+  assert.equal(stateAfterDefault.projectConfig.overrides.alpha, undefined);
+  const alphaRowAfterDefault = stateAfterDefault.installs.find((r) => r.name === 'alpha');
+  assert.equal(alphaRowAfterDefault.projectOverride, null);
+
   fs.rmSync(root, { recursive: true, force: true });
 });

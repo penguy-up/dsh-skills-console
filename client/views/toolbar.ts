@@ -50,6 +50,7 @@ export function Toolbar({
           : null),
       h('div', { key: 'view', className: 'dshsc-segment' },
         h('button', { className: 'dshsc-btn', 'aria-pressed': String(view === 'flat'), onClick: () => onViewChange('flat') }, t('view.flat')),
-        h('button', { className: 'dshsc-btn', 'aria-pressed': String(view === 'agent'), onClick: () => onViewChange('agent') }, t('view.agent'))),
+        h('button', { className: 'dshsc-btn', 'aria-pressed': String(view === 'agent'), onClick: () => onViewChange('agent') }, t('view.agent')),
+        h('button', { className: 'dshsc-btn', 'aria-pressed': String(view === 'source'), onClick: () => onViewChange('source') }, t('view.source'))),
     ] : null);
 }

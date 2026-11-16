@@ -3,6 +3,7 @@ import path from 'node:path';
 import { isSkillName } from '@deepseek-ai/dsh-skill';
 import { findProjectRoot, listRoots, ROOT_RANKS, scanSkillRoot } from './roots.js';
 import { readSkillDocument } from './skill-md.js';
+import { readProjectConfig } from './project-policy.js';
 
 /**
  * 本地策略 provider（v0.4.0 起替代「~/.dsh/skills 停用桩」）。
@@ -120,41 +121,82 @@ export function createPolicyProvider({ paths, getState, logger = () => {} }: any
       try {
         // canonical 不在扫描根里时，发候选等于「凭空造出一个本来不可见的技能」。
         if (!paths.canonicalScanned) return [];
-        const installs = disabledInstalls();
-        if (installs.length === 0) return [];
+        const projectRoot = projectRootFor(options.cwd);
+        const projectConfig = projectRoot ? readProjectConfig(projectRoot) : null;
+        const projectOverrides = projectConfig?.overrides || null;
+
+        const disabled = disabledInstalls();
+        const candidateNames = new Set<string>();
+        for (const install of disabled) {
+          candidateNames.add(install.name);
+        }
+        if (projectOverrides) {
+          for (const [name, override] of Object.entries(projectOverrides)) {
+            if (override?.mode === 'hidden') {
+              candidateNames.add(name);
+            }
+          }
+        }
+        if (candidateNames.size === 0) return [];
+
         const winners = scanNative(options.cwd, 'list');
         const candidates: any[] = [];
-        for (const install of installs) {
-          const dir = canonicalDirOf(install.name);
+        const disabledMap = new Map(disabled.map((i) => [i.name, i]));
+
+        for (const name of candidateNames) {
+          const isGloballyDisabled = disabledMap.has(name);
+          const override = projectOverrides?.[name];
+
+          // 1. 全局停用但项目级覆写为 auto：项目级解禁，不发停用候选
+          if (isGloballyDisabled && override?.mode === 'auto') {
+            continue;
+          }
+
+          // 2. 既非全局停用，也非项目级 hidden：不发候选
+          if (!isGloballyDisabled && override?.mode !== 'hidden') {
+            continue;
+          }
+
+          const dir = canonicalDirOf(name);
+          if (!isDirectory(dir)) continue;
+
           const docPath = path.join(dir, 'SKILL.md');
           let doc;
           try {
             doc = readSkillDocument(docPath);
           } catch (error) {
-            logger('policy.document.failed', { name: install.name, message: error?.message || String(error) });
+            logger('policy.document.failed', { name, message: error?.message || String(error) });
             continue;
           }
-          const name = doc.fields?.name;
-          if (typeof name !== 'string' || !isSkillName(name) || !doc.fields.description) {
+          const docName = doc.fields?.name;
+          if (typeof docName !== 'string' || !isSkillName(docName) || !doc.fields.description) {
             // 与宿主 / roots.js 同一口径：缺 name/description 的目录本来就不被当成技能，
             // 发候选等于凭空造一个。
-            logger('policy.document.invalid', { name: install.name });
+            logger('policy.document.invalid', { name });
             continue;
           }
-          const winner = winners.get(name);
+
+          const winner = winners.get(docName);
           // 项目 / user-dsh 副本赢：保持沉默，副本继续可见（P0b）。
           if (winner && !samePath(winner.skillFile, docPath)) continue;
+
+          const isProjectOverride = override?.mode === 'hidden';
+
           candidates.push({
-            name,
+            name: docName,
             description: doc.fields.description || DISABLED_DESCRIPTION,
             invocation: { modelInvocable: false, userInvocable: false },
             provider: POLICY_PROVIDER,
-            source: 'user-agents',
+            source: isProjectOverride ? 'project-override' : 'user-agents',
             rank: POLICY_RANK,
-            locator: { kind: 'canonical', installName: install.name, name, docPath, dir },
+            locator: { kind: 'canonical', installName: name, name: docName, docPath, dir },
             resourceBase: { kind: 'directory', path: dir },
             path: docPath,
-            metadata: { dshSkillsConsole: { disabled: true } },
+            metadata: {
+              dshSkillsConsole: isProjectOverride
+                ? { projectOverride: true }
+                : { disabled: true },
+            },
           });
         }
         return candidates;
@@ -175,9 +217,20 @@ export function createPolicyProvider({ paths, getState, logger = () => {} }: any
         // 不信任候选里的任意路径：只认 canonical/<installName>/SKILL.md
         if (!samePath(candidate?.locator?.docPath, docPath) || !isDirectory(dir)) return undefined;
 
+        const projectRoot = projectRootFor(options.cwd);
+        const projectConfig = projectRoot ? readProjectConfig(projectRoot) : null;
+        const override = projectConfig?.overrides?.[name] || projectConfig?.overrides?.[installName];
+
         const state = stateOf();
         const install = state?.installs?.find((item) => item && item.name === installName) || null;
-        if (!install || install.enabled !== false) return undefined;
+        const isGloballyDisabled = Boolean(install && install.enabled === false);
+
+        if (isGloballyDisabled && override?.mode === 'auto') {
+          return undefined;
+        }
+        if (!isGloballyDisabled && override?.mode !== 'hidden') {
+          return undefined;
+        }
 
         // 候选可能已经陈旧：重新算一遍 winner，副本赢了就不再压它。
         const winners = scanNative(options.cwd, 'get');
@@ -191,11 +244,13 @@ export function createPolicyProvider({ paths, getState, logger = () => {} }: any
           return undefined;
         }
         if (doc.fields?.name !== name || !doc.fields.description) return undefined;
+
+        const isProjectOverride = override?.mode === 'hidden';
         return {
           name,
           description: doc.fields.description || DISABLED_DESCRIPTION,
           invocation: { modelInvocable: false, userInvocable: false },
-          source: 'user-agents',
+          source: isProjectOverride ? 'project-override' : 'user-agents',
           provider: POLICY_PROVIDER,
           resourceBase: { kind: 'directory', path: dir },
           path: docPath,

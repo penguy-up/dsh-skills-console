@@ -4,7 +4,7 @@
 正文与文件接口是**只读**，不写 canonical、不写 v3 lock、不受 `state.json` 只读降级影响；
 技能简介的 `GET` 只读本地缓存，`POST` 才会调用模型（只写插件自己的 `intros.json`）。
 
-- 前缀：`/api/morehao/skills-console`
+- 前缀：`/api/penguy-up/skills-console`
 - 鉴权：所有请求必须带 `x-dsh-skills-console: 1`（缺头 → 403）；跨源请求会先触发预检，等于顺带挡住 CSRF。
 - 错误响应：`{ ok: false, code, message, detail }`，HTTP 400。
 

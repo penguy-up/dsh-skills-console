@@ -34,6 +34,8 @@ export interface SectionProps {
   page?: boolean;
   pickDirectory?: () => Promise<unknown> | unknown;
   onPlacementChange?: (next: string) => void;
+  /** 右侧开始页打开时注入当前 Session 的 workspace。 */
+  initialCwd?: string | null;
 }
 
 type ViewerMode = 'drawer' | 'page';
@@ -43,8 +45,8 @@ interface ViewerState {
   mode: ViewerMode;
 }
 
-export function Section({ t, page = false, pickDirectory, onPlacementChange }: SectionProps) {
-  const { data, error, busy, toasts, setToast, dismissToast, setBusy, reload, run } = useSkillsData(t.lang || 'zh');
+export function Section({ t, page = false, pickDirectory, onPlacementChange, initialCwd = null }: SectionProps) {
+  const { data, error, busy, toasts, setToast, dismissToast, setBusy, reload, run, selectedCwd, setSelectedCwd } = useSkillsData(t.lang || 'zh', initialCwd);
   const [tab, setTab] = React.useState('installed');
   const [view, setView] = React.useState('flat');
   const [modal, setModal] = React.useState<ModalState | null>(null);
@@ -72,6 +74,10 @@ export function Section({ t, page = false, pickDirectory, onPlacementChange }: S
     setPendingUpdate(readPendingUpdate());
   }, []);
 
+  const handleSelectScope = React.useCallback((nextCwd: string | null) => {
+    void reload({ cwd: nextCwd || null });
+  }, [reload]);
+
   const rows = data?.installs || [];
   const actions = useSkillActions({ t, rows, reload, run, setBusy, setToast, setModal });
 
@@ -81,15 +87,31 @@ export function Section({ t, page = false, pickDirectory, onPlacementChange }: S
   // 批量更新只处理无本地改动、可直接 fast-forward 的行；有本地改动仍需逐个确认
   const bulkCount = rows.filter((row) => row.status === 'update-available').length;
   const unknownCount = rows.filter((row) => row.status === 'unknown').length;
-  const offCount = rows.filter((row) => row.mode === 'hidden' || row.enabled === false).length;
-  const manualCount = rows.filter((row) => row.mode === 'manual').length;
+  const effectiveMode = (row: SkillRow) => {
+    if (selectedCwd && row.projectOverride) {
+      return typeof row.projectOverride === 'string' ? row.projectOverride : row.projectOverride.mode;
+    }
+    return row.mode || 'auto';
+  };
+  const offCount = rows.filter((row) => {
+    if (selectedCwd && row.projectOverride) {
+      return effectiveMode(row) === 'hidden';
+    }
+    return row.mode === 'hidden' || row.enabled === false;
+  }).length;
+  const manualCount = rows.filter((row) => effectiveMode(row) === 'manual').length;
   const counts = { all: rows.length, update: updateCount, unknown: unknownCount, manual: manualCount, off: offCount };
   const queryText = query.trim().toLowerCase();
   const visibleRows = rows.filter((row) => {
     if (filter === 'update' && !updatable(row)) return false;
     if (filter === 'unknown' && row.status !== 'unknown') return false;
-    if (filter === 'manual' && row.mode !== 'manual') return false;
-    if (filter === 'off' && row.mode !== 'hidden' && row.enabled !== false) return false;
+    if (filter === 'manual' && effectiveMode(row) !== 'manual') return false;
+    if (filter === 'off') {
+      const isOff = selectedCwd && row.projectOverride
+        ? effectiveMode(row) === 'hidden'
+        : (row.mode === 'hidden' || row.enabled === false);
+      if (!isOff) return false;
+    }
     if (!queryText) return true;
     const agentLabels = row.exports.map((item) => item.label);
     return [row.name, row.source || '', ...agentLabels].join(' ').toLowerCase().includes(queryText);
@@ -177,6 +199,9 @@ export function Section({ t, page = false, pickDirectory, onPlacementChange }: S
     onAdopt: actions.adopt,
     onToggleMode: actions.toggleMode,
     onSetInvocation: actions.setInvocation,
+    onBatchInvocation: actions.batchSetInvocation,
+    onSetProjectInvocation: actions.setProjectInvocation,
+    onBatchSetProjectInvocation: actions.batchSetProjectInvocation,
     onRequestUnpark: actions.requestUnpark,
     onUpdate: actions.requestUpdate,
     onDelete: actions.requestDelete,
@@ -244,6 +269,9 @@ export function Section({ t, page = false, pickDirectory, onPlacementChange }: S
       placementBusy,
       readOnly: Boolean(data?.readOnly),
       pluginUpdate,
+      workspaces: data?.workspaces || [],
+      selectedCwd,
+      onSelectScope: handleSelectScope,
       onCheckUpdate: () => setUpdateOpen(true),
       onToggleSettings: toggleSettings,
       onChangePlacement: (next: string) => void changePlacement(next),
@@ -284,6 +312,7 @@ export function Section({ t, page = false, pickDirectory, onPlacementChange }: S
           writable,
           agentTip,
           builtinOpen,
+          selectedCwd,
           actions: installedActions,
         })
       : tab === 'migrate'

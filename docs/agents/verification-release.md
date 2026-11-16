@@ -22,8 +22,8 @@ Host 侧路由要带自定义头，否则 403：
 
 ```bash
 # 需要 dsh web 在跑（或自己起一个带 webServer 服务的最小宿主）
-curl -s -H 'x-dsh-skills-console: 1' 'http://127.0.0.1:<port>/api/morehao/skills-console/state?cwd=' | jq '.readOnly, (.ledger|keys)'
-curl -s -H 'x-dsh-skills-console: 1' -X POST 'http://127.0.0.1:<port>/api/morehao/skills-console/updates/check' -d '{}' | jq
+curl -s -H 'x-dsh-skills-console: 1' 'http://127.0.0.1:<port>/api/penguy-up/skills-console/state?cwd=' | jq '.readOnly, (.ledger|keys)'
+curl -s -H 'x-dsh-skills-console: 1' -X POST 'http://127.0.0.1:<port>/api/penguy-up/skills-console/updates/check' -d '{}' | jq
 ```
 
 无头请求应返回 `403 error.skills.forbidden`；错误码统一 `error.skills.<code>`，新增错误码时同步 `client.js` 的文案映射。

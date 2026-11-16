@@ -4,6 +4,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { findProjectRoot } from '../paths.js';
+import { readProjectConfig } from '../project-policy.js';
 import { buildLedger, readLock } from '../inventory.js';
 import { ensureMigrated as runMigrations } from '../migrations.js';
 import { nativeCapabilities, state } from './guards.js';
@@ -103,6 +105,25 @@ export async function getState(ctx: ServiceCtx, { cwd, workspace, lang }: any = 
         };
       })
     : state(ctx).subscriptions;
+
+  const resolvedProjectRoot = (typeof cwd === 'string' && cwd.trim())
+    ? findProjectRoot(cwd, fs.existsSync)
+    : null;
+  const projectConf = resolvedProjectRoot ? readProjectConfig(resolvedProjectRoot) : null;
+  const projectOverrides = projectConf?.overrides || {};
+  const projectConfig = resolvedProjectRoot
+    ? {
+        projectRoot: resolvedProjectRoot,
+        projectName: path.basename(resolvedProjectRoot),
+        overrides: projectOverrides,
+      }
+    : null;
+
+  const installRowsWithOverrides = (installRows || []).map((row: any) => ({
+    ...row,
+    projectOverride: projectOverrides[row.name] || null,
+  }));
+
   const rowByName = new Map(ledger.rows.map((row) => [row.name, row]));
   const visibleList: any[] = [];
   for (const [name, item] of visible.byName) {
@@ -137,7 +158,7 @@ export async function getState(ctx: ServiceCtx, { cwd, workspace, lang }: any = 
     agents: { all: registry.all(), detected: detectedTargets(ctx) },
     subscriptions,
     workspaces: await workspaceList(ctx),
-    installs: installRows,
+    installs: installRowsWithOverrides,
     exports: state(ctx).exports,
     legacyShadows: state(ctx).legacyShadows,
     roots: visible.roots,
@@ -156,6 +177,7 @@ export async function getState(ctx: ServiceCtx, { cwd, workspace, lang }: any = 
     },
     cwd: cwd || null,
     projectRoot: visible.projectRoot,
+    projectConfig,
     workspace: workspace || null,
     scannedAt: ledger.scannedAt,
   };
