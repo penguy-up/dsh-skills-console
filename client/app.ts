@@ -7,7 +7,7 @@ import { h } from './host.js';
 import { readLayoutSelected, writeLayoutSelected } from './update-store.js';
 import { registerProjectSkillsSurface } from './project-guide.js';
 
-export const inject = ['slots', 'betterSidebar'];
+export const inject = ['slots', 'sessions'];
 
 export function apply(ctx: any): void {
   const locale = ctx.get('locale');
@@ -18,7 +18,7 @@ export function apply(ctx: any): void {
   const pickDirectory = async () => ctx.get('uiWorkspace')?.pickDirectory?.();
   const layout = ctx.get('layout');
   const surface = createSurface({ slots, layout, t, pickDirectory });
-  ctx.effect(() => registerProjectSkillsSurface(ctx, t), 'dsh-skills-console:better-sidebar');
+  ctx.effect(() => registerProjectSkillsSurface(ctx, t), 'dsh-skills-console:conversation-entry');
 
   // 入口自愈：boot 时无条件注册一次 settings.section（保命入口，保证「设置里一定找得到」）。
   // 侧栏偏好只影响 mount() 挂哪一套；两者互斥、绝不重复注册同名 slot（重复 id 会让宿主抛

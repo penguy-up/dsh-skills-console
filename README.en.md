@@ -35,6 +35,15 @@ It gathers the skills on your machine into one list: what you have, where it cam
 | Subscriptions | Follow upstream changes of an `owner/repo`; snapshots only, no skill download. Expand an entry to see the author's own description, or let the model write an AI intro before deciding. ref / subdirectory optional; an empty ref follows the default branch |
 | Scope | Manages both globally shared and current-project skills; project policies write project overrides without modifying global skills |
 
+## Fork additions
+
+Compared with upstream `@morehao/dsh-skills-console`, this fork adds:
+
+- **Group by source**: the Installed view can group skills by `owner/repo`; repository names link to GitHub, groups show counts, collapse/expand with local persistence, and unlinked local skills get their own group.
+- **Source-group batch policies**: each source group summarizes Auto / Manual only / Fully disabled modes and can apply an invocation policy to the whole group, reporting succeeded, skipped, and failed items.
+- **Project skills entry**: the console detects the Git project for the current workspace and provides global/current-project scope switching plus a dedicated project-skills entry.
+- **Project-scoped policy overrides**: set Auto / Manual only / Fully disabled for one skill or an entire source group in the current project, or clear the override to inherit global settings. Project configuration is written to `<projectRoot>/.dsh/skills-console.json` without modifying global skill files.
+
 ## Screenshots
 
 Screenshots are from a real DSH Web session on v0.5.2 (dark theme). All assets live in [`assets/`](https://github.com/penguy-up/dsh-skills-console/tree/main/assets) (bitmap icons and UI screenshots) and are not published to npm, so they are referenced by absolute URL and render on both GitHub and the npm page.

@@ -289,6 +289,18 @@ const STATE = {
   scannedAt: 'now',
 };
 
+test('项目技能入口：脱离 sidebar 插件并注册到新建/已有会话输入区', async () => {
+  const { registrations } = loadModule(STATE);
+  const hero = registrations.find((entry) => entry.key === 'conversation.hero.options' && entry.active);
+  const dock = registrations.find((entry) => entry.key === 'conversation.composer.dock' && entry.active);
+  assert.ok(hero, '新建会话入口注册到 conversation.hero.options');
+  assert.ok(dock, '已有会话入口注册到 conversation.composer.dock');
+  assert.equal(hero.options.order, 100, '新建会话入口位于 Agent preset 后');
+  assert.equal(dock.options.order, 100, '已有会话入口位于上下文使用率后');
+  assert.equal(pkg.peerDependencies?.['dsh-better-sidebar'], undefined, '不再依赖 dsh-better-sidebar');
+  assert.equal(pkg.dsh.client.inject.includes('dsh-better-sidebar'), false, '不再注入 dsh-better-sidebar');
+});
+
 test('渲染：三个技能、状态标签、tab 计数、操作列四件套', async () => {
   const { Component, stub } = loadModule(STATE);
   const first = stub.render(Component, {});

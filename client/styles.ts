@@ -1007,4 +1007,10 @@ export const CSS = `
   .dshsc-migrate-tag { font-size: 11px; padding: 1px 7px; border-radius: 5px; font-weight: 600; white-space: nowrap; }
   .dshsc-migrate-tag.install { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);
     color: var(--dsw-alias-state-success-primary); border: 1px solid color-mix(in srgb, var(--dsw-alias-state-success-primary) 30%, transparent); }
+  .dshsc-project-entry-wrap { display: inline-flex; align-items: center; flex: none; }
+  .dshsc-project-entry { white-space: nowrap; border-color: transparent; background: transparent; color: var(--dsw-alias-label-secondary); }
+  .dshsc-project-entry:hover:not(:disabled) { border-color: transparent; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+  .dshsc-project-modal { width: min(1100px, calc(100vw - 48px)); height: min(760px, calc(100vh - 48px)); max-width: none; display: flex; flex-direction: column; overflow: hidden; }
+  .dshsc-project-modal-body { flex: 1; min-height: 0; overflow: hidden; }
+  .dshsc-project-modal-body > .dshsc-page { height: 100%; padding: 16px 20px 24px; }
 `;
